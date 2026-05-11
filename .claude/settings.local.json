@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(mkdir -p C:/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/design_extracted)",
+      "Bash(tar -xzf C:/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/webfetch-1778482027849-ru6qp3.bin -C C:/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/design_extracted)",
+      "Bash(mkdir -p /mnt/c/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/design_extracted)",
+      "Read(//mnt/c/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/**)",
+      "Bash(tar -xzf /mnt/c/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/webfetch-1778482027849-ru6qp3.bin -C /mnt/c/Users/shin/.claude/projects/C--DEV-serie/bb650aec-862e-4b12-8803-14b80b59c234/tool-results/design_extracted)"
+    ]
+  }
+}
