@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MediaType {
+  SERIES
+  ANIME
+}
+
+enum ShowStatus {
+  RETURNING
+  ENDED
+  CANCELED
+  UPCOMING
+  IN_PRODUCTION
+}
+
+enum WatchStatus {
+  WATCHING
+  COMPLETED
+  PLAN_TO_WATCH
+  DROPPED
+  PAUSED
+}
+
+enum RelationType {
+  SEQUEL
+  PREQUEL
+  SPINOFF
+  ALTERNATIVE
+  PARENT
+  RELATED
+}
+
+enum NotifType {
+  NEW_EPISODE
+  NEW_SEASON
+  SHOW_RETURNING
+  EPISODE_TOMORROW
+  SEASON_COMPLETE
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  color         String   @default("#A855F7")
+  initials      String   @default("?")
+  platforms     String[] @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions         Session[]
+  userShows        UserShow[]
+  userEpisodes     UserEpisode[]
+  listMemberships  ListMember[]
+  listItems        ListItem[]
+  notifications    Notification[]
+  pushSubscriptions PushSubscription[]
+  syncLogs         SyncLog[]
+
+  @@index([email])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Show {
+  id           String     @id @default(cuid())
+  tmdbId       Int?       @unique
+  anilistId    Int?       @unique
+  title        String
+  originalTitle String?
+  type         MediaType
+  status       ShowStatus @default(RETURNING)
+  genre        String?
+  network      String?
+  overview     String?
+  posterPath   String?
+  backdropPath String?
+  year         Int?
+  runtime      Int?
+  totalSeasons Int        @default(0)
+  syncPriority Int        @default(0)
+  lastSyncedAt DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  seasons       Season[]
+  userShows     UserShow[]
+  listItems     ListItem[]
+  relationsFrom ShowRelation[] @relation("FromRelations")
+  relationsTo   ShowRelation[] @relation("ToRelations")
+
+  @@index([tmdbId])
+  @@index([anilistId])
+  @@index([type])
+  @@index([status])
+}
+
+model Season {
+  id         String   @id @default(cuid())
+  showId     String
+  number     Int
+  title      String?
+  year       Int?
+  airDate    DateTime?
+  posterPath String?
+  overview   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  show     Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  episodes Episode[]
+
+  @@unique([showId, number])
+  @@index([showId])
+}
+
+model Episode {
+  id          String    @id @default(cuid())
+  seasonId    String
+  number      Int
+  title       String?
+  overview    String?
+  runtime     Int?
+  airDate     DateTime?
+  stillPath   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  season       Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  userEpisodes UserEpisode[]
+
+  @@unique([seasonId, number])
+  @@index([seasonId])
+  @@index([airDate])
+}
+
+model UserShow {
+  id           String      @id @default(cuid())
+  userId       String
+  showId       String
+  status       WatchStatus @default(WATCHING)
+  rating       Float?
+  notifyEnabled Boolean    @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  show Show @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
+  @@index([userId])
+  @@index([showId])
+  @@index([status])
+}
+
+model UserEpisode {
+  id         String   @id @default(cuid())
+  userId     String
+  episodeId  String
+  watchedAt  DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeId])
+  @@index([userId])
+  @@index([episodeId])
+  @@index([watchedAt])
+}
+
+model SharedList {
+  id          String   @id @default(cuid())
+  name        String
+  emoji       String   @default("📋")
+  color       String   @default("#A855F7")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members ListMember[]
+  items   ListItem[]
+}
+
+model ListMember {
+  id       String @id @default(cuid())
+  listId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  list SharedList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, userId])
+  @@index([listId])
+  @@index([userId])
+}
+
+model ListItem {
+  id        String   @id @default(cuid())
+  listId    String
+  showId    String
+  addedById String
+  position  Int      @default(0)
+  note      String?
+  createdAt DateTime @default(now())
+
+  list    SharedList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  show    Show       @relation(fields: [showId],    references: [id], onDelete: Cascade)
+  addedBy User       @relation(fields: [addedById], references: [id])
+
+  @@unique([listId, showId])
+  @@index([listId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      NotifType
+  title     String
+  body      String
+  showId    String?
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SyncLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  target     String
+  duration   Int
+  showsCount Int      @default(0)
+  errors     Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+}
+
+model ShowRelation {
+  id         String       @id @default(cuid())
+  fromShowId String
+  toShowId   String
+  type       RelationType
+  order      Int          @default(0)
+
+  fromShow Show @relation("FromRelations", fields: [fromShowId], references: [id], onDelete: Cascade)
+  toShow   Show @relation("ToRelations",   fields: [toShowId],   references: [id], onDelete: Cascade)
+
+  @@unique([fromShowId, toShowId])
+  @@index([fromShowId])
+  @@index([toShowId])
+}

@@ -1,0 +1,2 @@
+-- AddForeignKey
+ALTER TABLE "ListItem" ADD CONSTRAINT "ListItem_showId_fkey" FOREIGN KEY ("showId") REFERENCES "Show"("id") ON DELETE CASCADE ON UPDATE CASCADE;
