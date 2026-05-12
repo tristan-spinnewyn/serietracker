@@ -7,14 +7,14 @@ import { Icon } from '@/components/ui/icon';
 
 type NavIcon = 'home' | 'calendar' | 'binge' | 'search' | 'lists' | 'bell' | 'star';
 
-const NAV_ITEMS: { id: string; href: string; label: string; icon: NavIcon; badgeNew?: boolean; badge?: number }[] = [
+const NAV_ITEMS: { id: string; href: string; label: string; icon: NavIcon; badgeNew?: boolean }[] = [
   { id: 'home',          href: '/dashboard',     label: 'Accueil',       icon: 'home' },
   { id: 'calendar',      href: '/calendar',      label: 'Calendrier',    icon: 'calendar' },
   { id: 'sorties',       href: '/sorties',       label: 'Sorties',       icon: 'star' },
   { id: 'binge',         href: '/binge',         label: 'Diffusion terminée', icon: 'binge' },
   { id: 'search',        href: '/search',        label: 'Rechercher',    icon: 'search' },
   { id: 'lists',         href: '/lists',         label: 'Listes',        icon: 'lists' },
-  { id: 'notifications', href: '/notifications', label: 'Notifications', icon: 'bell', badge: 3 },
+  { id: 'notifications', href: '/notifications', label: 'Notifications', icon: 'bell' },
 ];
 
 export interface SidebarList {
@@ -56,7 +56,7 @@ function ListSection({ title, items }: { title: string; items: SidebarList[] }) 
   );
 }
 
-export function Sidebar({ lists, user }: { lists: SidebarList[]; user: SidebarUser }) {
+export function Sidebar({ lists, user, unreadCount }: { lists: SidebarList[]; user: SidebarUser; unreadCount: number }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -82,7 +82,7 @@ export function Sidebar({ lists, user }: { lists: SidebarList[]; user: SidebarUs
           >
             <Icon name={item.icon} size={16} />
             <span>{item.label}</span>
-            {item.badge    && <span className="nav-badge">{item.badge}</span>}
+            {item.id === 'notifications' && unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
             {item.badgeNew && <span className="nav-badge green">New</span>}
           </Link>
         ))}

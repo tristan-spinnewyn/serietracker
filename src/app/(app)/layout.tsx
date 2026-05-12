@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  const [lists, watchingCount, dbUser] = await Promise.all([
+  const [lists, watchingCount, dbUser, unreadCount] = await Promise.all([
     db.sharedList.findMany({
       where: { members: { some: { userId: session.user.id } } },
       include: { _count: { select: { items: true } } },
@@ -16,6 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }),
     db.userShow.count({ where: { userId: session.user.id, status: 'WATCHING' } }),
     db.user.findUnique({ where: { id: session.user.id }, select: { color: true, initials: true } }),
+    db.notification.count({ where: { userId: session.user.id, read: false } }),
   ]);
 
   return (
@@ -35,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           initials: dbUser?.initials ?? session.user.name.slice(0, 2).toUpperCase(),
           watchingCount,
         }}
+        unreadCount={unreadCount}
       />
       <main className="main">
         <Topbar />

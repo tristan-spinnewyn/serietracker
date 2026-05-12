@@ -40,10 +40,9 @@ export function Topbar() {
         <kbd>⌘ K</kbd>
       </button>
 
-      <button className="icon-btn">
+      <a href="/notifications" className="icon-btn">
         <Icon name="bell" size={18} />
-        <span className="dot" />
-      </button>
+      </a>
       <a href="/settings" className="icon-btn">
         <Icon name="settings" size={18} />
       </a>
