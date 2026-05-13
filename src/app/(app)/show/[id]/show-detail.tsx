@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
-import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch } from '@/lib/actions/shows';
+import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
 import type { WatchStatus, RelationType } from '@prisma/client';
@@ -255,6 +255,8 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
   const [isPending, startTransition] = useTransition();
   const [notifyEnabled, setNotifyEnabled] = useState(initialNotify);
   const [copied, setCopied] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
   const [openEpMenu, setOpenEpMenu] = useState<string | null>(null);
   const [showListModal, setShowListModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -302,6 +304,19 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleResync = async () => {
+    setSyncing(true);
+    setSyncDone(false);
+    try {
+      await resyncShow(show.id);
+      setSyncDone(true);
+      setTimeout(() => setSyncDone(false), 3000);
+      router.refresh();
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleMarkUpTo = (season: SeasonProps, epId: string) => {
@@ -558,7 +573,23 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
 
           {/* Infos */}
           <div className="side-card">
-            <h3>Infos</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Infos</h3>
+              <button
+                className="btn"
+                style={{ fontSize: 11, padding: '3px 8px', opacity: syncing ? 0.6 : 1 }}
+                onClick={handleResync}
+                disabled={syncing}
+                title="Récupérer les dernières données depuis TMDB / AniList"
+              >
+                {syncDone
+                  ? <><Icon name="check" size={11} />Mis à jour</>
+                  : syncing
+                    ? 'Sync…'
+                    : <><Icon name="chevR" size={11} />Réimporter</>
+                }
+              </button>
+            </div>
             {([
               ['Type', isAnime ? 'Anime' : 'Série'],
               ['Statut', STATUS_LABEL[show.status] ?? show.status],

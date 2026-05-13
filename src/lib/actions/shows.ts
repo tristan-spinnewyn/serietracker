@@ -112,6 +112,15 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
   revalidatePath('/show/[id]', 'page');
 }
 
+// ── Réimporter manuellement un show ─────────────────────────────────────────
+
+export async function resyncShow(showId: string) {
+  await getSession();
+  const { syncShow } = await import('@/lib/sync/sync-show');
+  await syncShow(showId);
+  revalidatePath(`/show/${showId}`);
+}
+
 // ── Marquer plusieurs épisodes comme vus ─────────────────────────────────────
 
 export async function markEpisodesWatchedBatch(episodeIds: string[]) {
