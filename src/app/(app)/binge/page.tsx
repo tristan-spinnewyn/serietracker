@@ -38,16 +38,20 @@ export default async function BingePage() {
     take: 6,
   });
 
+  const now = new Date();
+
   const catchup = watchingShows
     .map(us => {
       const show = us.show;
       const allEps = show.seasons.flatMap(s => s.episodes);
-      const watched = allEps.filter(e => watchedIds.has(e.id)).length;
-      const remaining = allEps.length - watched;
+      const hasUnaired = allEps.some(e => e.airDate && e.airDate > now);
+      const airedEps = allEps.filter(e => !e.airDate || e.airDate <= now);
+      const watched = airedEps.filter(e => watchedIds.has(e.id)).length;
+      const remaining = airedEps.length - watched;
       const runtime = show.runtime ?? 45;
-      return { show, watched, total: allEps.length, remaining, remainingHours: Math.round(remaining * runtime / 60 * 10) / 10 };
+      return { show, watched, total: airedEps.length, remaining, remainingHours: Math.round(remaining * runtime / 60 * 10) / 10, hasUnaired };
     })
-    .filter(r => r.remaining > 0);
+    .filter(r => r.remaining > 0 && !r.hasUnaired);
 
   const discover = endedShows.map(show => {
     const total = show.seasons.reduce((a, s) => a + s.episodes.length, 0);
