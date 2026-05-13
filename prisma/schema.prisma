@@ -98,6 +98,7 @@ model Show {
   totalSeasons Int        @default(0)
   syncPriority Int        @default(0)
   lastSyncedAt DateTime?
+  nextSyncAt   DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -111,6 +112,7 @@ model Show {
   @@index([anilistId])
   @@index([type])
   @@index([status])
+  @@index([nextSyncAt])
 }
 
 model Season {

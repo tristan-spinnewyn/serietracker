@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { fetchTmdbDetail } from '@/lib/tmdb/client';
 import { fetchAnilistDetail } from '@/lib/anilist/client';
+import { nextSyncMs } from '@/lib/sync/sync-show';
 import type { Show, RelationType } from '@prisma/client';
 import type { TmdbSeason } from '@/lib/tmdb/client';
 
@@ -39,6 +40,7 @@ export async function importShowFromTmdb(tmdbId: number): Promise<Show> {
       totalSeasons: detail.totalSeasons,
       syncPriority: 0,
       lastSyncedAt: new Date(),
+      nextSyncAt: new Date(Date.now() + nextSyncMs(detail.status)),
     },
   });
 
@@ -86,6 +88,7 @@ export async function importShowFromAnilist(
       totalSeasons: detail.totalSeasons,
       syncPriority: 0,
       lastSyncedAt: new Date(),
+      nextSyncAt: new Date(Date.now() + nextSyncMs(detail.status)),
     },
   });
 

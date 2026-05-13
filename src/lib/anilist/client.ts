@@ -174,3 +174,51 @@ function mapStatus(s: string): ShowStatus {
   };
   return m[s] ?? 'RETURNING';
 }
+
+// ── Batch sync (id_in) ────────────────────────────────────────────────────────
+
+export interface AnilistSyncData {
+  id: number;
+  status: string;
+  title: { english?: string; romaji?: string };
+  coverImage?: { extraLarge?: string };
+  bannerImage?: string;
+  description?: string;
+  airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
+}
+
+export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, AnilistSyncData>> {
+  const result = new Map<number, AnilistSyncData>();
+  const CHUNK = 50;
+
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const query = `
+      query ($ids: [Int]) {
+        Page(perPage: 50) {
+          media(id_in: $ids, type: ANIME) {
+            id status
+            title { english romaji }
+            coverImage { extraLarge }
+            bannerImage
+            description(asHtml: false)
+            airingSchedule(notYetAired: false, perPage: 50) {
+              nodes { episode airingAt }
+            }
+          }
+        }
+      }
+    `;
+
+    const data = await gql<{ Page: { media: AnilistSyncData[] } }>(query, { ids: chunk });
+    for (const media of data?.Page?.media ?? []) {
+      result.set(media.id, media);
+    }
+
+    if (i + CHUNK < ids.length) {
+      await new Promise(r => setTimeout(r, 700));
+    }
+  }
+
+  return result;
+}
