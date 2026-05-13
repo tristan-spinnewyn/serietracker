@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
-import { batchFetchAnilistData } from '@/lib/anilist/client';
+import { batchFetchAnilistData, parseAnilistProviders } from '@/lib/anilist/client';
 import type { Show, ShowStatus, NotifType } from '@prisma/client';
 
 const DAY = 86_400_000;
@@ -197,6 +197,7 @@ interface AnilistPayload {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
+  externalLinks?: Array<{ site: string; type: string }>;
   relations?: {
     edges: Array<{
       relationType: string;
@@ -267,6 +268,9 @@ async function checkAndNotifySequels(
 
 async function applyAnilistData(showId: string, payload: AnilistPayload): Promise<ShowStatus> {
   const newStatus = mapAnilistStatus(payload.status);
+  const providers = payload.externalLinks
+    ? parseAnilistProviders(payload.externalLinks)
+    : undefined;
 
   await db.show.update({
     where: { id: showId },
@@ -276,6 +280,7 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
       overview: payload.description?.replace(/<[^>]+>/g, '') ?? null,
       posterPath: payload.coverImage?.extraLarge ?? null,
       backdropPath: payload.bannerImage ?? null,
+      ...(providers !== undefined ? { providers } : {}),
     },
   });
 

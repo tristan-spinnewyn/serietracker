@@ -31,6 +31,7 @@ export interface AnilistShowDetail extends AnilistSearchResult {
   runtime: number | null;
   totalSeasons: number;
   backdropPath: string | null;
+  providers: string[];
   episodes: AnilistEpisode[];
   relations: AnilistRelation[];
 }
@@ -101,6 +102,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
         airingSchedule(notYetAired: false, perPage: 50) {
           nodes { episode airingAt }
         }
+        externalLinks { site type }
         relations {
           edges {
             relationType
@@ -146,6 +148,10 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
       };
     });
 
+  const providers = parseAnilistProviders(
+    (m.externalLinks as Array<{ site: string; type: string }> ?? [])
+  );
+
   return {
     anilistId,
     title: title.english ?? title.romaji,
@@ -160,6 +166,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
     genre: (m.genres as string[] ?? []).slice(0, 3).join(' · ') || null,
     runtime: m.duration as number ?? null,
     totalSeasons: 1,
+    providers,
     episodes,
     relations,
   };
@@ -173,6 +180,26 @@ function mapStatus(s: string): ShowStatus {
     CANCELLED: 'CANCELED',
   };
   return m[s] ?? 'RETURNING';
+}
+
+const ANILIST_SITE_MAP: Record<string, string> = {
+  'Crunchyroll':               'crunchyroll',
+  'Netflix':                   'netflix',
+  'ADN':                       'adn',
+  'Animation Digital Network': 'adn',
+  'Amazon Prime Video':        'prime',
+  'Disney Plus':               'disney',
+  'HIDIVE':                    'hidive',
+  'Apple TV Plus':             'appletv',
+  'Canal+':                    'canal',
+};
+
+export function parseAnilistProviders(links: Array<{ site: string; type: string }>): string[] {
+  const keys = links
+    .filter(l => l.type === 'STREAMING')
+    .map(l => ANILIST_SITE_MAP[l.site])
+    .filter(Boolean) as string[];
+  return [...new Set(keys)];
 }
 
 // ── Batch sync (id_in) ────────────────────────────────────────────────────────
@@ -195,6 +222,7 @@ export interface AnilistSyncData {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
+  externalLinks?: Array<{ site: string; type: string }>;
   relations?: { edges: AnilistSyncRelation[] };
 }
 
@@ -216,6 +244,7 @@ export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, 
             airingSchedule(notYetAired: false, perPage: 50) {
               nodes { episode airingAt }
             }
+            externalLinks { site type }
             relations {
               edges {
                 relationType
