@@ -67,6 +67,25 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
   revalidatePath('/show/[id]', 'page');
 }
 
+// ── Marquer plusieurs épisodes comme vus ─────────────────────────────────────
+
+export async function markEpisodesWatchedBatch(episodeIds: string[]) {
+  const session = await getSession();
+  if (!episodeIds.length) return;
+
+  await db.$transaction(
+    episodeIds.map(episodeId =>
+      db.userEpisode.upsert({
+        where: { userId_episodeId: { userId: session.user.id, episodeId } },
+        update: {},
+        create: { userId: session.user.id, episodeId },
+      }),
+    ),
+  );
+
+  revalidatePath('/show/[id]', 'page');
+}
+
 // ── Toggle notification pour un show ────────────────────────────────────────
 
 export async function toggleShowNotif(showId: string, enabled: boolean) {

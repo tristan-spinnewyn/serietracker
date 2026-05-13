@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
-import { toggleEpisode, upsertUserShow } from '@/lib/actions/shows';
+import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
 import type { WatchStatus, RelationType } from '@prisma/client';
@@ -238,12 +238,13 @@ interface Props {
   seasons: SeasonProps[];
   nextEp: NextEpProps | null;
   userStatus: WatchStatus | null;
+  notifyEnabled: boolean;
   followers: FollowerProps[];
   relations: RelationItem[];
   currentUserId: string;
 }
 
-export function ShowDetail({ show, seasons, nextEp, userStatus, followers, relations }: Props) {
+export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, followers, relations }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState('aperçu');
   const [openSeasons, setOpenSeasons] = useState<Set<string>>(
@@ -253,9 +254,19 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, followers, relat
     () => new Set(seasons.flatMap(s => s.episodes.filter(e => e.watched).map(e => e.id)))
   );
   const [isPending, startTransition] = useTransition();
+  const [notifyEnabled, setNotifyEnabled] = useState(initialNotify);
+  const [copied, setCopied] = useState(false);
+  const [openEpMenu, setOpenEpMenu] = useState<string | null>(null);
   const [showListModal, setShowListModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [liveRelations, setLiveRelations] = useState<RelationItem[]>(relations);
+
+  useEffect(() => {
+    if (!openEpMenu) return;
+    const close = () => setOpenEpMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openEpMenu]);
 
   const isAnime = show.type === 'ANIME';
 
@@ -280,6 +291,27 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, followers, relat
   const handleStatus = (status: WatchStatus) => {
     startTransition(() => upsertUserShow({ showId: show.id, status }));
     router.refresh();
+  };
+
+  const handleToggleNotify = () => {
+    const next = !notifyEnabled;
+    setNotifyEnabled(next);
+    startTransition(() => toggleShowNotif(show.id, next));
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleMarkUpTo = (season: SeasonProps, epId: string) => {
+    const idx = season.episodes.findIndex(e => e.id === epId);
+    const toMark = season.episodes.slice(0, idx + 1).filter(e => !watched.has(e.id)).map(e => e.id);
+    if (!toMark.length) return;
+    setWatched(prev => { const next = new Set(prev); toMark.forEach(id => next.add(id)); return next; });
+    startTransition(() => markEpisodesWatchedBatch(toMark));
+    setOpenEpMenu(null);
   };
 
   const backdropBg = show.backdropUrl
@@ -345,9 +377,22 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, followers, relat
                 <Icon name="check" size={14} />
                 {userStatus ? WATCH_LABEL[userStatus] : 'Ajouter'}
               </button>
-              <button className="btn"><Icon name="bell" size={14} />Notifs</button>
+              <button
+                className={`btn ${notifyEnabled ? 'active' : ''}`}
+                onClick={handleToggleNotify}
+                disabled={isPending}
+                title={notifyEnabled ? 'Désactiver les notifications' : 'Activer les notifications'}
+              >
+                <Icon name="bell" size={14} />{notifyEnabled ? 'Notifs on' : 'Notifs off'}
+              </button>
               <button className="btn" onClick={() => setShowListModal(true)}><Icon name="plus" size={14} />Liste</button>
-              <button className="btn btn-icon-only"><Icon name="share" size={14} /></button>
+              <button
+                className="btn btn-icon-only"
+                onClick={handleShare}
+                title={copied ? 'Lien copié !' : 'Copier le lien'}
+              >
+                <Icon name={copied ? 'check' : 'share'} size={14} />
+              </button>
             </div>
           </div>
         </div>
@@ -420,9 +465,26 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, followers, relat
                             )}
                           </div>
                           <div className="date">{e.airDate}</div>
-                          <button className="more" onClick={ev => ev.stopPropagation()}>
-                            <Icon name="more" size={16} />
-                          </button>
+                          <div style={{ position: 'relative' }} onClick={ev => ev.stopPropagation()}>
+                            <button
+                              className="more"
+                              onClick={() => setOpenEpMenu(o => o === e.id ? null : e.id)}
+                            >
+                              <Icon name="more" size={16} />
+                            </button>
+                            {openEpMenu === e.id && (
+                              <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: 4, minWidth: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                                <button
+                                  onClick={() => handleMarkUpTo(s, e.id)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', fontSize: 13, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', textAlign: 'left' }}
+                                  onMouseEnter={ev => (ev.currentTarget.style.background = 'var(--bg-3)')}
+                                  onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                                >
+                                  <Icon name="check" size={13} />Marquer jusqu&apos;ici
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

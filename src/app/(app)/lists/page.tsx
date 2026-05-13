@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui/icon';
 import { Poster } from '@/components/ui/poster';
 import { posterUrl, paletteFor } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
-import { createList, addMemberToList } from '@/lib/actions/lists';
+import { createList, addMemberToList, removeShowFromList } from '@/lib/actions/lists';
 
 interface ShowRef { id: string; title: string; type: 'SERIES' | 'ANIME'; year: number | null; network: string | null; tmdbId: number | null; anilistId: number | null; posterPath: string | null; }
 interface ListItem { id: string; show: ShowRef; addedBy: { name: string; color: string; initials: string }; }
@@ -188,6 +188,14 @@ export default function ListsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [openItemMenu, setOpenItemMenu] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openItemMenu) return;
+    const close = () => setOpenItemMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openItemMenu]);
 
   const load = () => {
     apiFetch<{ lists: ListData[] }>('/api/lists')
@@ -200,6 +208,14 @@ export default function ListsPage() {
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRemoveShow = (listId: string, showId: string) => {
+    setOpenItemMenu(null);
+    setLists(prev => prev.map(l =>
+      l.id === listId ? { ...l, items: l.items.filter(i => i.show.id !== showId) } : l
+    ));
+    removeShowFromList(listId, showId);
+  };
 
   const handleCreated = (id: string) => {
     setShowModal(false);
@@ -329,7 +345,26 @@ export default function ListsPage() {
                     <div className="avatar av" style={{ width: 18, height: 18, borderRadius: '50%', fontSize: 9, background: `linear-gradient(135deg, ${item.addedBy.color}, ${item.addedBy.color}99)`, borderColor: 'transparent' }}>{item.addedBy.initials}</div>
                     <span>ajouté par {item.addedBy.name}</span>
                   </div>
-                  <button className="icon-btn" onClick={e => e.preventDefault()}><Icon name="more" size={16} /></button>
+                  <div style={{ position: 'relative' }} onClick={e => e.preventDefault()}>
+                    <button
+                      className="icon-btn"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenItemMenu(o => o === item.show.id ? null : item.show.id); }}
+                    >
+                      <Icon name="more" size={16} />
+                    </button>
+                    {openItemMenu === item.show.id && (
+                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: 4, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                        <button
+                          onClick={() => list && handleRemoveShow(list.id, item.show.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', fontSize: 13, borderRadius: 6, background: 'transparent', border: 'none', color: '#FECACA', cursor: 'pointer', textAlign: 'left' }}
+                          onMouseEnter={ev => (ev.currentTarget.style.background = 'rgba(251,113,133,0.1)')}
+                          onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                        >
+                          <Icon name="x" size={13} />Retirer de la liste
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>
