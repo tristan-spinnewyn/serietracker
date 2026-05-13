@@ -122,6 +122,7 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
       } : null}
       userStatus={myUserShow?.status ?? null}
       notifyEnabled={myUserShow?.notifyEnabled ?? true}
+      userRating={myUserShow?.rating ?? null}
       followers={followers}
       relations={relations}
     />

@@ -29,7 +29,7 @@ export default async function DashboardPage() {
     // Shows en cours
     db.userShow.findMany({
       where: { userId, status: 'WATCHING' },
-      include: { show: { include: { seasons: { include: { episodes: { select: { id: true, number: true } } } } } } },
+      include: { show: { include: { seasons: { include: { episodes: { select: { id: true, number: true, title: true, airDate: true } } } } } } },
       orderBy: { updatedAt: 'desc' },
       take: 4,
     }),
@@ -71,7 +71,7 @@ export default async function DashboardPage() {
     const allEps = show.seasons.flatMap(s => s.episodes);
     const nextEpDb = show.seasons
       .sort((a, b) => a.number - b.number)
-      .flatMap(s => s.episodes.map(e => ({ id: e.id, seasonNumber: s.number, episodeNumber: e.number })))
+      .flatMap(s => s.episodes.map(e => ({ id: e.id, seasonNumber: s.number, episodeNumber: e.number, title: e.title, airDate: e.airDate })))
       .find(e => !watchedIds.has(e.id));
     return {
       id: show.id,
@@ -81,7 +81,12 @@ export default async function DashboardPage() {
       posterUrl: posterUrl(show),
       watchedCount: allEps.filter(e => watchedIds.has(e.id)).length,
       totalEps: allEps.length,
-      nextEp: nextEpDb ? { s: nextEpDb.seasonNumber, e: nextEpDb.episodeNumber, title: '', date: '' } : null,
+      nextEp: nextEpDb ? {
+        s: nextEpDb.seasonNumber,
+        e: nextEpDb.episodeNumber,
+        title: nextEpDb.title ?? `Épisode ${nextEpDb.episodeNumber}`,
+        date: nextEpDb.airDate ? new Date(nextEpDb.airDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '',
+      } : null,
     };
   });
 

@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { ProviderRow } from '@/components/ui/provider-logo';
-import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow } from '@/lib/actions/shows';
+import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow, removeUserShow, rateShow } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
 import type { WatchStatus, RelationType } from '@prisma/client';
@@ -240,11 +240,12 @@ interface Props {
   nextEp: NextEpProps | null;
   userStatus: WatchStatus | null;
   notifyEnabled: boolean;
+  userRating: number | null;
   followers: FollowerProps[];
   relations: RelationItem[];
 }
 
-export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, followers, relations }: Props) {
+export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, userRating: initialRating, followers, relations }: Props) {
   const router = useRouter();
   const [openSeasons, setOpenSeasons] = useState<Set<string>>(
     () => new Set(seasons.find(s => s.watchedCount < s.episodeCount)?.id ? [seasons.find(s => s.watchedCount < s.episodeCount)!.id] : [])
@@ -254,9 +255,12 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
   );
   const [isPending, startTransition] = useTransition();
   const [notifyEnabled, setNotifyEnabled] = useState(initialNotify);
+  const [rating, setRating] = useState<number | null>(initialRating);
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [openEpMenu, setOpenEpMenu] = useState<string | null>(null);
   const [showListModal, setShowListModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -309,14 +313,29 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
   const handleResync = async () => {
     setSyncing(true);
     setSyncDone(false);
+    setSyncError(false);
     try {
       await resyncShow(show.id);
       setSyncDone(true);
       setTimeout(() => setSyncDone(false), 3000);
       router.refresh();
+    } catch {
+      setSyncError(true);
+      setTimeout(() => setSyncError(false), 4000);
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleRemove = () => {
+    startTransition(() => removeUserShow(show.id));
+    router.push('/dashboard');
+  };
+
+  const handleRate = (stars: number) => {
+    const next = rating === stars ? 0 : stars;
+    setRating(next || null);
+    startTransition(() => rateShow(show.id, next));
   };
 
   const handleMarkUpTo = (season: SeasonProps, epId: string) => {
@@ -416,6 +435,15 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 <Icon name={copied ? 'check' : 'share'} size={14} />
               </button>
             </div>
+            {userStatus && (
+              <button
+                onClick={handleRemove}
+                disabled={isPending}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-3)', padding: '4px 0', textDecoration: 'underline', textUnderlineOffset: 3 }}
+              >
+                Retirer de ma liste
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -539,6 +567,21 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 ~{Math.round(totalWatched * show.runtime / 60)}h regardées · {Math.round((totalEps - totalWatched) * show.runtime / 60)}h restantes
               </div>
             )}
+            {userStatus && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 12 }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => handleRate(star)}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: 18, lineHeight: 1, color: (hoverRating ?? rating ?? 0) >= star ? '#FBBF24' : 'var(--line-2)', transition: 'color .1s' }}
+                    title={`${star} étoile${star > 1 ? 's' : ''}`}
+                  >★</button>
+                ))}
+                {rating && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>{rating}/5</span>}
+              </div>
+            )}
           </div>
 
           {/* Prochain épisode */}
@@ -580,9 +623,11 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
               >
                 {syncDone
                   ? <><Icon name="check" size={11} />Mis à jour</>
-                  : syncing
-                    ? 'Sync…'
-                    : <><Icon name="chevR" size={11} />Réimporter</>
+                  : syncError
+                    ? '✕ Échec'
+                    : syncing
+                      ? 'Sync…'
+                      : <><Icon name="chevR" size={11} />Réimporter</>
                 }
               </button>
             </div>

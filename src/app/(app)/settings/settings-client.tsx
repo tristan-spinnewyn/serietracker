@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { PROVIDERS } from '@/lib/constants';
@@ -63,7 +63,17 @@ function Toast({ msg, ok }: { msg: string; ok: boolean }) {
   );
 }
 
-export function SettingsClient({ user }: { user: User }) {
+function urlBase64ToUint8Array(base64: string): ArrayBuffer {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buf;
+}
+
+export function SettingsClient({ user, vapidPublicKey }: { user: User; vapidPublicKey: string }) {
   const router = useRouter();
 
   // ── Profil
@@ -78,6 +88,54 @@ export function SettingsClient({ user }: { user: User }) {
   const [confPw, setConfPw] = useState('');
   const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [pwPending, startPw] = useTransition();
+
+  // ── Push notifications
+  const [pushState, setPushState] = useState<'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'>('loading');
+  const [pushPending, setPushPending] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushState('unsupported');
+      return;
+    }
+    if (Notification.permission === 'denied') { setPushState('denied'); return; }
+    navigator.serviceWorker.register('/sw.js').then(reg =>
+      reg.pushManager.getSubscription().then(sub => setPushState(sub ? 'subscribed' : 'unsubscribed'))
+    ).catch(() => setPushState('unsupported'));
+  }, []);
+
+  const handlePushToggle = async () => {
+    setPushPending(true);
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      if (pushState === 'subscribed') {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch('/api/push', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+          await sub.unsubscribe();
+        }
+        setPushState('unsubscribed');
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') { setPushState('denied'); return; }
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+        const json = sub.toJSON();
+        await fetch('/api/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+        });
+        setPushState('subscribed');
+      }
+    } catch {
+      // permission refusée ou erreur SW
+    } finally {
+      setPushPending(false);
+    }
+  };
 
   // ── Plateformes
   const [platforms, setPlatforms] = useState<string[]>(user.platforms);
@@ -256,24 +314,30 @@ export function SettingsClient({ user }: { user: User }) {
       {/* ── Notifications ────────────────────────────────── */}
       <Card title="Notifications">
         <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-2)' }}>
-          Les notifications push web sont gérées par le navigateur. Active-les depuis la bannière d&apos;autorisation qui s&apos;affiche à la première visite.
+          Reçois une notification push à 8h pour les nouveaux épisodes de tes shows.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 10, border: '1px solid var(--line)' }}>
-          <Icon name="bell" size={18} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          <Icon name="bell" size={18} style={{ color: pushState === 'subscribed' ? 'var(--violet)' : 'var(--text-3)', flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 500 }}>Notifications push</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Nouveaux épisodes · 8h du matin · via VAPID natif</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              {pushState === 'loading'      && 'Vérification…'}
+              {pushState === 'unsupported'  && 'Non supporté par ce navigateur'}
+              {pushState === 'denied'       && 'Permission refusée — réactive-la dans les réglages du navigateur'}
+              {pushState === 'subscribed'   && '● Activées sur cet appareil'}
+              {pushState === 'unsubscribed' && 'Désactivées sur cet appareil'}
+            </div>
           </div>
-          <button
-            className="btn"
-            style={{ marginLeft: 'auto', flexShrink: 0 }}
-            onClick={() => {
-              if (!('Notification' in window)) return;
-              Notification.requestPermission();
-            }}
-          >
-            Activer
-          </button>
+          {pushState !== 'unsupported' && pushState !== 'denied' && pushState !== 'loading' && (
+            <button
+              className={`btn ${pushState === 'subscribed' ? '' : 'violet'}`}
+              style={{ marginLeft: 'auto', flexShrink: 0, opacity: pushPending ? 0.7 : 1 }}
+              onClick={handlePushToggle}
+              disabled={pushPending}
+            >
+              {pushPending ? '…' : pushState === 'subscribed' ? 'Désactiver' : 'Activer'}
+            </button>
+          )}
         </div>
       </Card>
     </div>

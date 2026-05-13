@@ -6,7 +6,11 @@ import { Icon } from '@/components/ui/icon';
 import { Poster } from '@/components/ui/poster';
 import { posterUrl, paletteFor } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
-import { createList, addMemberToList, removeShowFromList } from '@/lib/actions/lists';
+import { createList, addMemberToList, removeShowFromList, reorderList } from '@/lib/actions/lists';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { DragEndEvent } from '@dnd-kit/core';
 
 interface ShowRef { id: string; title: string; type: 'SERIES' | 'ANIME'; year: number | null; network: string | null; tmdbId: number | null; anilistId: number | null; posterPath: string | null; }
 interface ListItem { id: string; show: ShowRef; addedBy: { name: string; color: string; initials: string }; }
@@ -15,6 +19,59 @@ interface ListData { id: string; name: string; emoji: string; color: string; mem
 
 const LIST_COLORS = ['#A855F7','#FB7185','#34D399','#FBBF24','#60A5FA','#F97316','#EC4899','#14B8A6'];
 const EMOJIS = ['📋','🎬','🌟','🔥','🎯','🛋️','🌸','☀️','🎮','📺','🍿','🎭'];
+
+function SortableListItem({ item, onRemove, openItemMenu, setOpenItemMenu, listId }: {
+  item: ListItem;
+  onRemove: (showId: string) => void;
+  openItemMenu: string | null;
+  setOpenItemMenu: (id: string | null) => void;
+  listId: string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.show.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : 'auto' as const };
+
+  return (
+    <div ref={setNodeRef} style={style} className="list-item" {...attributes}>
+      <span className="drag" {...listeners} style={{ cursor: 'grab', touchAction: 'none' }}>
+        <Icon name="grip" size={16} />
+      </span>
+      <Link href={`/show/${item.show.id}`} className="li-poster" style={{ textDecoration: 'none', display: 'block' }}>
+        <Poster title={item.show.title} type={item.show.type} imageUrl={posterUrl(item.show)} showTitle={false} showType={false} style={{ width: '100%', height: '100%' }} />
+      </Link>
+      <Link href={`/show/${item.show.id}`} style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
+        <div className="t">{item.show.title}</div>
+        <div className="meta">
+          <span className={`pill ${item.show.type === 'SERIES' ? 'series' : 'anime'}`}>{item.show.type === 'SERIES' ? 'Série' : 'Anime'}</span>
+          <span>{item.show.year ?? '—'}{item.show.network ? ` · ${item.show.network}` : ''}</span>
+        </div>
+      </Link>
+      <div className="by">
+        <div className="avatar av" style={{ width: 18, height: 18, borderRadius: '50%', fontSize: 9, background: `linear-gradient(135deg, ${item.addedBy.color}, ${item.addedBy.color}99)`, borderColor: 'transparent' }}>{item.addedBy.initials}</div>
+        <span>ajouté par {item.addedBy.name}</span>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <button
+          className="icon-btn"
+          onClick={e => { e.stopPropagation(); setOpenItemMenu(openItemMenu === item.show.id ? null : item.show.id); }}
+        >
+          <Icon name="more" size={16} />
+        </button>
+        {openItemMenu === item.show.id && (
+          <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: 4, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+            <button
+              onClick={() => onRemove(item.show.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', fontSize: 13, borderRadius: 6, background: 'transparent', border: 'none', color: '#FECACA', cursor: 'pointer', textAlign: 'left' }}
+              onMouseEnter={ev => (ev.currentTarget.style.background = 'rgba(251,113,133,0.1)')}
+              onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+            >
+              <Icon name="x" size={13} />Retirer de la liste
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function NewListModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [name, setName] = useState('');
@@ -189,6 +246,7 @@ export default function ListsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [openItemMenu, setOpenItemMenu] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   useEffect(() => {
     if (!openItemMenu) return;
@@ -196,6 +254,19 @@ export default function ListsPage() {
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [openItemMenu]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !activeId) return;
+    setLists(prev => prev.map(l => {
+      if (l.id !== activeId) return l;
+      const oldIndex = l.items.findIndex(i => i.show.id === active.id);
+      const newIndex = l.items.findIndex(i => i.show.id === over.id);
+      const reordered = arrayMove(l.items, oldIndex, newIndex);
+      reorderList(l.id, reordered.map(i => i.show.id));
+      return { ...l, items: reordered };
+    }));
+  };
 
   const load = () => {
     apiFetch<{ lists: ListData[] }>('/api/lists')
@@ -328,45 +399,20 @@ export default function ListsPage() {
                   Liste vide — ajoute des shows depuis la <Link href="/search" style={{ color: 'var(--series)' }}>recherche</Link>.
                 </div>
               )}
-              {items.map(item => (
-                <Link key={item.id} href={`/show/${item.show.id}`} className="list-item" style={{ textDecoration: 'none' }}>
-                  <span className="drag"><Icon name="grip" size={16} /></span>
-                  <div className="li-poster">
-                    <Poster title={item.show.title} type={item.show.type} imageUrl={posterUrl(item.show)} showTitle={false} showType={false} style={{ width: '100%', height: '100%' }} />
-                  </div>
-                  <div>
-                    <div className="t">{item.show.title}</div>
-                    <div className="meta">
-                      <span className={`pill ${item.show.type === 'SERIES' ? 'series' : 'anime'}`}>{item.show.type === 'SERIES' ? 'Série' : 'Anime'}</span>
-                      <span>{item.show.year ?? '—'}{item.show.network ? ` · ${item.show.network}` : ''}</span>
-                    </div>
-                  </div>
-                  <div className="by">
-                    <div className="avatar av" style={{ width: 18, height: 18, borderRadius: '50%', fontSize: 9, background: `linear-gradient(135deg, ${item.addedBy.color}, ${item.addedBy.color}99)`, borderColor: 'transparent' }}>{item.addedBy.initials}</div>
-                    <span>ajouté par {item.addedBy.name}</span>
-                  </div>
-                  <div style={{ position: 'relative' }} onClick={e => e.preventDefault()}>
-                    <button
-                      className="icon-btn"
-                      onClick={e => { e.preventDefault(); e.stopPropagation(); setOpenItemMenu(o => o === item.show.id ? null : item.show.id); }}
-                    >
-                      <Icon name="more" size={16} />
-                    </button>
-                    {openItemMenu === item.show.id && (
-                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 8, padding: 4, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
-                        <button
-                          onClick={() => list && handleRemoveShow(list.id, item.show.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', fontSize: 13, borderRadius: 6, background: 'transparent', border: 'none', color: '#FECACA', cursor: 'pointer', textAlign: 'left' }}
-                          onMouseEnter={ev => (ev.currentTarget.style.background = 'rgba(251,113,133,0.1)')}
-                          onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
-                        >
-                          <Icon name="x" size={13} />Retirer de la liste
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-              ))}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={items.map(i => i.show.id)} strategy={verticalListSortingStrategy}>
+                  {items.map(item => (
+                    <SortableListItem
+                      key={item.show.id}
+                      item={item}
+                      listId={list.id}
+                      openItemMenu={openItemMenu}
+                      setOpenItemMenu={setOpenItemMenu}
+                      onRemove={showId => list && handleRemoveShow(list.id, showId)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
           </div>
         )}

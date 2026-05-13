@@ -12,5 +12,5 @@ export default async function SettingsPage() {
     select: { id: true, name: true, email: true, color: true, initials: true, platforms: true },
   });
 
-  return <SettingsClient user={user} />;
+  return <SettingsClient user={user} vapidPublicKey={process.env.VAPID_PUBLIC_KEY ?? ''} />;
 }

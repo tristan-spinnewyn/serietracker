@@ -9,7 +9,7 @@ const LABELS: Record<string, string> = {
   '/sorties':       'Sorties',
   '/search':        'Rechercher',
   '/lists':         'Listes',
-  '/binge':         'Binge-ready',
+  '/binge':         'Diffusion terminée',
   '/notifications': 'Notifications',
   '/settings':      'Paramètres',
 };
