@@ -157,7 +157,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
     posterPath: d.poster_path ?? null,
     backdropPath: d.backdrop_path ?? null,
     overview: d.overview ?? null,
-    status: mapStatus(d.status),
+    status: mapTmdbStatus(d.status),
     network,
     genre,
     runtime,
@@ -168,7 +168,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
   };
 }
 
-function mapStatus(s: string): ShowStatus {
+export function mapTmdbStatus(s: string): ShowStatus {
   const m: Record<string, ShowStatus> = {
     'Returning Series': 'RETURNING',
     'Ended': 'ENDED',

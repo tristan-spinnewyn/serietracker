@@ -162,7 +162,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
     posterPath: coverImage?.extraLarge ?? null,
     backdropPath: m.bannerImage as string ?? null,
     overview: (m.description as string)?.replace(/<[^>]+>/g, '') ?? null,
-    status: mapStatus(m.status as string),
+    status: mapAnilistStatus(m.status as string),
     network: (m.studios as { nodes: { name: string }[] })?.nodes?.[0]?.name ?? null,
     genre: (m.genres as string[] ?? []).slice(0, 3).join(' · ') || null,
     runtime: m.duration as number ?? null,
@@ -174,7 +174,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
   };
 }
 
-function mapStatus(s: string): ShowStatus {
+export function mapAnilistStatus(s: string): ShowStatus {
   const m: Record<string, ShowStatus> = {
     FINISHED: 'ENDED',
     RELEASING: 'RETURNING',
