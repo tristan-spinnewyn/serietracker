@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
+import { ProviderRow } from '@/components/ui/provider-logo';
 import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
@@ -210,7 +211,7 @@ interface ShowProps {
   year: number | null; overview: string | null;
   posterUrl: string | null; backdropUrl: string | null;
   network: string | null; genre: string | null;
-  runtime: number | null; totalSeasons: number;
+  runtime: number | null; totalSeasons: number; providers: string[];
 }
 interface EpisodeProps {
   id: string; number: number; title: string;
@@ -592,6 +593,11 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 <span style={{ fontSize: 13 }}>{v}</span>
               </div>
             ))}
+            {show.providers.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+                <ProviderRow ids={show.providers} size={22} label="Dispo sur" />
+              </div>
+            )}
           </div>
 
           {/* Famille */}

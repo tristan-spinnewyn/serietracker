@@ -89,8 +89,9 @@ function LocalCard({ show }: { show: Show }) {
         <div className="type-pill">{show.type === 'SERIES' ? 'Série' : 'Anime'}</div>
         <div className="title">{show.title}</div>
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-2)', display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{show.year ?? '—'}</span>
+        <ProviderRow ids={show.providers ?? []} size={16} max={3} />
       </div>
     </button>
   );

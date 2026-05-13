@@ -90,6 +90,7 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
         genre: show.genre,
         runtime: show.runtime,
         totalSeasons: show.totalSeasons,
+        providers: show.providers,
       }}
       seasons={show.seasons.map(s => ({
         id: s.id,
