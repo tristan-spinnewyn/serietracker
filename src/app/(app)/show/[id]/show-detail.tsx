@@ -214,7 +214,7 @@ interface ShowProps {
 }
 interface EpisodeProps {
   id: string; number: number; title: string;
-  runtime: string; airDate: string; watched: boolean; isNext: boolean;
+  runtime: string; airDate: string; watched: boolean; isNext: boolean; hasAired: boolean;
 }
 interface SeasonProps {
   id: string; number: number; title: string; year: number | null;
@@ -306,7 +306,10 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
 
   const handleMarkUpTo = (season: SeasonProps, epId: string) => {
     const idx = season.episodes.findIndex(e => e.id === epId);
-    const toMark = season.episodes.slice(0, idx + 1).filter(e => !watched.has(e.id)).map(e => e.id);
+    const toMark = season.episodes
+      .slice(0, idx + 1)
+      .filter(e => e.hasAired && !watched.has(e.id))
+      .map(e => e.id);
     if (!toMark.length) return;
     setWatched(prev => { const next = new Set(prev); toMark.forEach(id => next.add(id)); return next; });
     startTransition(() => markEpisodesWatchedBatch(toMark));
@@ -448,8 +451,14 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                   <div className="season-body">
                     {s.episodes.map(e => {
                       const isDone = watched.has(e.id);
+                      const notYet = !e.hasAired;
                       return (
-                        <div key={e.id} className={`ep-row ${isDone ? 'done' : ''}`} onClick={() => handleToggleEp(e.id)}>
+                        <div
+                          key={e.id}
+                          className={`ep-row ${isDone ? 'done' : ''}`}
+                          onClick={() => !notYet && handleToggleEp(e.id)}
+                          style={{ opacity: notYet ? 0.4 : 1, cursor: notYet ? 'default' : 'pointer' }}
+                        >
                           <div className="chk">{isDone && <Icon name="check" size={14} />}</div>
                           <div>
                             <div className="num">S{s.number} · E{e.number}</div>
@@ -457,9 +466,14 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                           </div>
                           <div>
                             <div className="t">{e.title}</div>
-                            {e.isNext && !isDone && (
+                            {e.isNext && !isDone && !notYet && (
                               <div style={{ fontSize: 11, color: isAnime ? 'var(--anime)' : 'var(--series)', marginTop: 3, fontWeight: 600 }}>
                                 ● Prochain épisode
+                              </div>
+                            )}
+                            {notYet && (
+                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
+                                Pas encore diffusé
                               </div>
                             )}
                           </div>
@@ -467,7 +481,8 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                           <div style={{ position: 'relative' }} onClick={ev => ev.stopPropagation()}>
                             <button
                               className="more"
-                              onClick={() => setOpenEpMenu(o => o === e.id ? null : e.id)}
+                              onClick={() => !notYet && setOpenEpMenu(o => o === e.id ? null : e.id)}
+                              style={{ opacity: notYet ? 0 : 1, pointerEvents: notYet ? 'none' : 'auto' }}
                             >
                               <Icon name="more" size={16} />
                             </button>

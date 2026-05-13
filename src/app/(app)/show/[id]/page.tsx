@@ -106,6 +106,7 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
           airDate: e.airDate ? new Date(e.airDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—',
           watched: watchedSet.has(e.id),
           isNext: e.id === nextEp?.id,
+          hasAired: !e.airDate || e.airDate <= new Date(),
         })),
       }))}
       nextEp={nextEp ? {
