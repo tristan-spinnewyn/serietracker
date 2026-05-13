@@ -177,6 +177,16 @@ function mapStatus(s: string): ShowStatus {
 
 // ── Batch sync (id_in) ────────────────────────────────────────────────────────
 
+export interface AnilistSyncRelation {
+  relationType: string;
+  node: {
+    id: number;
+    type: string;
+    status: string;
+    title: { english?: string; romaji?: string };
+  };
+}
+
 export interface AnilistSyncData {
   id: number;
   status: string;
@@ -185,6 +195,7 @@ export interface AnilistSyncData {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
+  relations?: { edges: AnilistSyncRelation[] };
 }
 
 export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, AnilistSyncData>> {
@@ -204,6 +215,12 @@ export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, 
             description(asHtml: false)
             airingSchedule(notYetAired: false, perPage: 50) {
               nodes { episode airingAt }
+            }
+            relations {
+              edges {
+                relationType
+                node { id type status title { english romaji } }
+              }
             }
           }
         }

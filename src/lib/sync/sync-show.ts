@@ -197,6 +197,72 @@ interface AnilistPayload {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
+  relations?: {
+    edges: Array<{
+      relationType: string;
+      node: { id: number; type: string; status: string; title: { english?: string; romaji?: string } };
+    }>;
+  };
+}
+
+type SequelInfo = { anilistId: number; status: string; title: string };
+
+async function checkAndNotifySequels(
+  showId: string,
+  showTitle: string,
+  relations: AnilistPayload['relations'],
+): Promise<void> {
+  const sequels: SequelInfo[] = (relations?.edges ?? [])
+    .filter(e => e.relationType === 'SEQUEL' && e.node.type === 'ANIME')
+    .filter(e => e.node.status === 'RELEASING' || e.node.status === 'NOT_YET_RELEASED')
+    .map(e => ({
+      anilistId: e.node.id,
+      status: e.node.status,
+      title: e.node.title.english ?? e.node.title.romaji ?? 'Suite',
+    }));
+
+  if (!sequels.length) return;
+
+  // Garder uniquement les séquelles pas encore importées dans la DB
+  const existing = await db.show.findMany({
+    where: { anilistId: { in: sequels.map(s => s.anilistId) } },
+    select: { anilistId: true },
+  });
+  const existingIds = new Set(existing.map(s => s.anilistId));
+  const unimported = sequels.filter(s => !existingIds.has(s.anilistId));
+  if (!unimported.length) return;
+
+  // Éviter les doublons : pas de notif SHOW_RETURNING pour ce show dans les 30 derniers jours
+  const since = new Date(Date.now() - 30 * DAY);
+  const already = await db.notification.findFirst({
+    where: { showId, type: 'SHOW_RETURNING', createdAt: { gte: since } },
+  });
+  if (already) return;
+
+  const subscribers = await db.userShow.findMany({
+    where: { showId, notifyEnabled: true },
+    select: { userId: true },
+  });
+  if (!subscribers.length) return;
+
+  const sequel = unimported[0];
+  const body = sequel.status === 'RELEASING'
+    ? `Suite en cours de diffusion : ${sequel.title}`
+    : `Suite annoncée : ${sequel.title}`;
+
+  const notifs = subscribers.map(({ userId }) => ({
+    userId,
+    type: 'SHOW_RETURNING' as NotifType,
+    title: showTitle,
+    body,
+    showId,
+  }));
+
+  await db.notification.createMany({ data: notifs });
+  const userIds = [...new Set(notifs.map(n => n.userId))];
+  await Promise.allSettled(
+    userIds.map(userId => sendPushToUser(userId, { title: showTitle, body })),
+  );
 }
 
 async function applyAnilistData(showId: string, payload: AnilistPayload): Promise<ShowStatus> {
@@ -244,6 +310,12 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
         airingSchedule(notYetAired: false, perPage: 50) {
           nodes { episode airingAt }
         }
+        relations {
+          edges {
+            relationType
+            node { id type status title { english romaji } }
+          }
+        }
       }
     }
   `;
@@ -256,7 +328,12 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
   const { data } = await res.json();
   if (!data?.Media) throw new Error(`AniList ${anilistId} introuvable`);
 
-  const newStatus = await applyAnilistData(showId, data.Media as AnilistPayload);
+  const payload = data.Media as AnilistPayload;
+  const newStatus = await applyAnilistData(showId, payload);
+
+  const show = await db.show.findUnique({ where: { id: showId }, select: { title: true } });
+  if (show) await checkAndNotifySequels(showId, show.title, payload.relations);
+
   return { newStatus };
 }
 
@@ -319,6 +396,7 @@ export async function batchSyncAnilistShows(
       });
 
       await notifyChanges(show.id, show.title, show.status, newStatus, show.totalSeasons, show.totalSeasons);
+      await checkAndNotifySequels(show.id, show.title, payload.relations);
       synced++;
     } catch {
       errors++;
