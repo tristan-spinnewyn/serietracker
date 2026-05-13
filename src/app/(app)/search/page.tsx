@@ -8,6 +8,7 @@ import { ProviderRow } from '@/components/ui/provider-logo';
 import { PALETTES } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
 import type { Show } from '@prisma/client';
+import { JustWatchCredit } from '@/components/ui/justwatch-credit';
 
 // Résultat distant (TMDB ou AniList, pas encore en DB)
 interface RemoteResult {
@@ -242,7 +243,7 @@ export default function SearchPage() {
       )}
 
       <div style={{ marginTop: 40, fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>
-        Données plateformes fournies par <strong style={{ color: 'var(--text-2)' }}>JustWatch</strong>
+        <JustWatchCredit />
       </div>
     </div>
   );

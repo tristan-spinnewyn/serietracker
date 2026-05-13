@@ -48,3 +48,4 @@ export function backdropUrl(show: { tmdbId: number | null; backdropPath: string 
   if (!show.backdropPath) return null;
   return show.tmdbId ? `${TMDB_IMG_W1280}${show.backdropPath}` : show.backdropPath;
 }
+

@@ -10,6 +10,7 @@ import { posterUrl } from '@/lib/constants';
 import type { NowCardData } from '@/components/shows/now-card';
 import type { ActivityEntry } from '@/components/shows/activity-row';
 import type { UpcomingItem } from '@/components/shows/upcoming-row';
+import { JustWatchCredit } from '@/components/ui/justwatch-credit';
 
 function greeting() {
   const h = new Date().getHours();
@@ -199,7 +200,7 @@ export default async function DashboardPage() {
 
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: '1px solid var(--line)', fontSize: 11, color: 'var(--text-3)', display: 'flex', justifyContent: 'space-between' }}>
         <span>SeriesTracker · usage privé familial</span>
-        <span>Données plateformes fournies par <strong style={{ color: 'var(--text-2)' }}>JustWatch</strong></span>
+        <JustWatchCredit />
       </div>
     </div>
   );

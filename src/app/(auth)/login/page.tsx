@@ -105,7 +105,7 @@ export default function LoginPage() {
           SeriesTracker
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--text-3)' }}>
-          famille Marchais · accès privé
+          Usage privé · accès restreint
         </p>
       </div>
       <Suspense fallback={null}>

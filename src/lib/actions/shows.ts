@@ -6,6 +6,51 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import type { WatchStatus } from '@prisma/client';
 
+async function checkSeasonComplete(userId: string, episodeIds: string[]) {
+  if (!episodeIds.length) return;
+
+  const episodes = await db.episode.findMany({
+    where: { id: { in: episodeIds } },
+    select: {
+      seasonId: true,
+      season: {
+        select: {
+          id: true, number: true,
+          showId: true,
+          show: { select: { title: true } },
+          episodes: { select: { id: true } },
+        },
+      },
+    },
+  });
+
+  const seasons = new Map(episodes.map(e => [e.seasonId, e.season]));
+
+  for (const season of seasons.values()) {
+    const allIds = season.episodes.map(e => e.id);
+    const watchedCount = await db.userEpisode.count({
+      where: { userId, episodeId: { in: allIds } },
+    });
+    if (watchedCount < allIds.length) continue;
+
+    const since = new Date(Date.now() - 7 * 86_400_000);
+    const already = await db.notification.findFirst({
+      where: { userId, showId: season.showId, type: 'SEASON_COMPLETE', createdAt: { gte: since } },
+    });
+    if (already) continue;
+
+    await db.notification.create({
+      data: {
+        userId,
+        type: 'SEASON_COMPLETE',
+        title: season.show.title,
+        body: `Tu as terminé la saison ${season.number} !`,
+        showId: season.showId,
+      },
+    });
+  }
+}
+
 async function getSession() {
   const session = await auth();
   if (!session?.user?.id) throw new Error('Non authentifié');
@@ -57,13 +102,13 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
       update: {},
       create: { userId: session.user.id, episodeId },
     });
+    await checkSeasonComplete(session.user.id, [episodeId]);
   } else {
     await db.userEpisode.delete({
       where: { userId_episodeId: { userId: session.user.id, episodeId } },
     }).catch(() => null);
   }
 
-  // Revalider la page du show (showId inconnu ici → revalider toutes les shows)
   revalidatePath('/show/[id]', 'page');
 }
 
@@ -83,6 +128,7 @@ export async function markEpisodesWatchedBatch(episodeIds: string[]) {
     ),
   );
 
+  await checkSeasonComplete(session.user.id, episodeIds);
   revalidatePath('/show/[id]', 'page');
 }
 

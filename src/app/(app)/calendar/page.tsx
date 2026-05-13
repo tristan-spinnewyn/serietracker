@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { paletteFor } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
+import { toggleShowNotif } from '@/lib/actions/shows';
 
 interface CalEpisode {
   id: string;
@@ -14,6 +15,7 @@ interface CalEpisode {
   seasonNumber: number;
   episodeNumber: number;
   airDate: string;
+  notifyEnabled: boolean;
 }
 
 const DAY_HEADS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -42,15 +44,30 @@ export default function CalendarPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [episodes, setEpisodes] = useState<CalEpisode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notifyMap, setNotifyMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams({ year: String(year), month: String(month + 1), scope });
     apiFetch<{ episodes: CalEpisode[] }>(`/api/calendar?${params}`)
-      .then(d => setEpisodes(d.episodes ?? []))
-      .catch(console.error)
+      .then(d => {
+        const eps = d.episodes ?? [];
+        setEpisodes(eps);
+        const map: Record<string, boolean> = {};
+        eps.forEach(e => { map[e.showId] = e.notifyEnabled; });
+        setNotifyMap(map);
+      })
+      .catch(() => setError('Impossible de charger le calendrier.'))
       .finally(() => setLoading(false));
   }, [year, month, scope]);
+
+  const handleToggleNotify = (showId: string) => {
+    const next = !(notifyMap[showId] ?? true);
+    setNotifyMap(prev => ({ ...prev, [showId]: next }));
+    toggleShowNotif(showId, next);
+  };
 
   const cells = buildCells(year, month);
 
@@ -102,6 +119,7 @@ export default function CalendarPage() {
       </div>
 
       {loading && <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>Chargement…</div>}
+      {error && <div style={{ fontSize: 13, color: '#FECACA', marginBottom: 12 }}>{error}</div>}
 
       {view === 'grid' ? (
         <div className="cal-grid">
@@ -150,8 +168,13 @@ export default function CalendarPage() {
                     <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>S{e.seasonNumber} · E{e.episodeNumber}</span>
                   </div>
                 </div>
-                <button className="bell on"><Icon name="bell" size={16} /></button>
-                <button className="icon-btn"><Icon name="more" size={16} /></button>
+                <button
+                  className={`bell ${notifyMap[e.showId] !== false ? 'on' : ''}`}
+                  onClick={() => handleToggleNotify(e.showId)}
+                  title={notifyMap[e.showId] !== false ? 'Désactiver les notifications' : 'Activer les notifications'}
+                >
+                  <Icon name="bell" size={16} />
+                </button>
               </div>
             );
           })}

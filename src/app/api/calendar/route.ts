@@ -26,7 +26,17 @@ export async function GET(req: NextRequest) {
         },
       },
     },
-    include: { season: { include: { show: true } } },
+    include: {
+      season: {
+        include: {
+          show: {
+            include: {
+              userShows: { where: { userId: session.user.id }, select: { notifyEnabled: true } },
+            },
+          },
+        },
+      },
+    },
     orderBy: { airDate: 'asc' },
   });
 
@@ -39,6 +49,7 @@ export async function GET(req: NextRequest) {
       seasonNumber: e.season.number,
       episodeNumber: e.number,
       airDate: e.airDate,
+      notifyEnabled: e.season.show.userShows[0]?.notifyEnabled ?? true,
     })),
   });
 }

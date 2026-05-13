@@ -119,9 +119,9 @@ export function Sidebar({ lists, user, unreadCount }: { lists: SidebarList[]; us
           <div className="name">{user.name}</div>
           <div className="sub">{user.watchingCount} show{user.watchingCount !== 1 ? 's' : ''} en cours</div>
         </div>
-        <a href="/settings" className="icon-btn" title="Paramètres">
+        <Link href="/settings" className="icon-btn" title="Paramètres">
           <Icon name="settings" size={15} />
-        </a>
+        </Link>
         <button
           className="icon-btn"
           title="Se déconnecter"

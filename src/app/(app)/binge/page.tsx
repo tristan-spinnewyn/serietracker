@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { Poster } from '@/components/ui/poster';
 import { Icon } from '@/components/ui/icon';
 import { posterUrl } from '@/lib/constants';
+import { JustWatchCredit } from '@/components/ui/justwatch-credit';
 
 export default async function BingePage() {
   const session = await auth();
@@ -129,7 +130,7 @@ export default async function BingePage() {
       )}
 
       <div style={{ marginTop: 40, fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>
-        Données plateformes fournies par <strong style={{ color: 'var(--text-2)' }}>JustWatch</strong>
+        <JustWatchCredit />
       </div>
     </div>
   );
