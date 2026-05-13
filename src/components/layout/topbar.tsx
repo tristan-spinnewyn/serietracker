@@ -6,10 +6,12 @@ import { Icon } from '@/components/ui/icon';
 const LABELS: Record<string, string> = {
   '/dashboard':     'Accueil',
   '/calendar':      'Calendrier',
+  '/sorties':       'Sorties',
   '/search':        'Rechercher',
   '/lists':         'Listes',
   '/binge':         'Binge-ready',
   '/notifications': 'Notifications',
+  '/settings':      'Paramètres',
 };
 
 export function Topbar() {

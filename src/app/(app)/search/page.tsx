@@ -104,28 +104,32 @@ export default function SearchPage() {
   const [local, setLocal] = useState<Show[]>([]);
   const [remote, setRemote] = useState<RemoteResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
-    if (q.length < 2) { setLocal([]); setRemote([]); return; }
+    if (q.length < 2) { setLocal([]); setRemote([]); setSearchError(null); return; }
 
     debounce.current = setTimeout(async () => {
       setLoading(true);
+      setSearchError(null);
       try {
         const params = new URLSearchParams({ q });
         if (filt !== 'all') params.set('type', filt);
+        if (onlyMyPlatforms) params.set('onlyMyPlatforms', 'true');
         const data = await apiFetch<{ local: Show[]; remote: RemoteResult[] }>(`/api/shows/search?${params}`);
         setLocal(data.local ?? []);
         setRemote(data.remote ?? []);
       } catch {
+        setSearchError('Impossible de lancer la recherche.');
         setLocal([]); setRemote([]);
       } finally {
         setLoading(false);
       }
     }, 300);
-  }, [q, filt]);
+  }, [q, filt, onlyMyPlatforms]);
 
   const handleImport = (result: RemoteResult) => {
     startTransition(async () => {
@@ -143,11 +147,7 @@ export default function SearchPage() {
     });
   };
 
-  const filteredLocal = onlyMyPlatforms
-    ? local // Le filtre plateforme nécessite une vraie relation provider en DB — laissé pour plus tard
-    : local;
-
-  const hasResults = filteredLocal.length > 0 || remote.length > 0;
+  const hasResults = local.length > 0 || remote.length > 0;
 
   return (
     <div className="page">
@@ -169,8 +169,11 @@ export default function SearchPage() {
         {loading && (
           <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>Recherche…</span>
         )}
+        {searchError && (
+          <span style={{ fontSize: 11, color: '#FECACA', flexShrink: 0 }}>{searchError}</span>
+        )}
         {q && !loading && (
-          <button className="chip" onClick={() => { setQ(''); setLocal([]); setRemote([]); }}>
+          <button className="chip" onClick={() => { setQ(''); setLocal([]); setRemote([]); setSearchError(null); }}>
             Effacer
           </button>
         )}
@@ -191,19 +194,19 @@ export default function SearchPage() {
         {hasResults && (
           <div style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="sparkle" size={12} />
-            {filteredLocal.length + remote.length} résultat{filteredLocal.length + remote.length > 1 ? 's' : ''}
+            {local.length + remote.length} résultat{local.length + remote.length > 1 ? 's' : ''}
           </div>
         )}
       </div>
 
       {/* Résultats locaux */}
-      {filteredLocal.length > 0 && (
+      {local.length > 0 && (
         <>
           <div className="section-h">
-            <h2>Dans ta bibliothèque <span className="count">· {filteredLocal.length}</span></h2>
+            <h2>Dans ta bibliothèque <span className="count">· {local.length}</span></h2>
           </div>
           <div className="poster-grid">
-            {filteredLocal.map(s => <LocalCard key={s.id} show={s} />)}
+            {local.map(s => <LocalCard key={s.id} show={s} />)}
           </div>
         </>
       )}
@@ -213,7 +216,7 @@ export default function SearchPage() {
         <>
           <div className="section-h">
             <h2>
-              {filteredLocal.length > 0 ? 'Aussi sur TMDB / AniList' : 'Résultats TMDB / AniList'}
+              {local.length > 0 ? 'Aussi sur TMDB / AniList' : 'Résultats TMDB / AniList'}
               <span className="count"> · {remote.length}</span>
             </h2>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Clic → import + sync</span>

@@ -121,7 +121,6 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
       notifyEnabled={myUserShow?.notifyEnabled ?? true}
       followers={followers}
       relations={relations}
-      currentUserId={session.user.id}
     />
   );
 }

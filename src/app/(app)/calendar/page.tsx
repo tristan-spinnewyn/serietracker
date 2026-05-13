@@ -175,6 +175,9 @@ export default function CalendarPage() {
                 >
                   <Icon name="bell" size={16} />
                 </button>
+                <Link href={`/show/${e.showId}`} className="icon-btn" title="Voir la fiche">
+                  <Icon name="chevR" size={16} />
+                </Link>
               </div>
             );
           })}

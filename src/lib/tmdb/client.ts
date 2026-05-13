@@ -23,7 +23,43 @@ export interface TmdbShowDetail extends TmdbSearchResult {
   runtime: number | null;
   totalSeasons: number;
   backdropPath: string | null;
+  providers: string[];
   seasons: TmdbSeason[];
+}
+
+// TMDB provider_id (France) → clé interne
+const TMDB_PROVIDER_MAP: Record<number, string> = {
+  8:    'netflix',
+  119:  'prime',
+  337:  'disney',
+  350:  'appletv',
+  63:   'canal',
+  283:  'crunchyroll',
+  1899: 'max',
+  493:  'arte',
+  2237: 'tf1',
+  430:  'hidive',
+};
+
+async function fetchProviders(tmdbId: number): Promise<string[]> {
+  const res = await fetch(
+    `${BASE}/tv/${tmdbId}/watch/providers`,
+    { headers: headers() },
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  const fr = data.results?.FR;
+  if (!fr) return [];
+
+  const all: { provider_id: number }[] = [
+    ...(fr.flatrate ?? []),
+    ...(fr.free ?? []),
+  ];
+  const keys = all
+    .map(p => TMDB_PROVIDER_MAP[p.provider_id])
+    .filter(Boolean) as string[];
+
+  return [...new Set(keys)];
 }
 
 export interface TmdbSeason {
@@ -104,6 +140,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
   const genre = (d.genres ?? []).map((g: { name: string }) => g.name).join(' · ') || null;
   const network = d.networks?.[0]?.name ?? null;
   const runtime = d.episode_run_time?.[0] ?? null;
+  const providers = await fetchProviders(tmdbId);
 
   return {
     tmdbId,
@@ -119,6 +156,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
     genre,
     runtime,
     totalSeasons: d.number_of_seasons ?? 0,
+    providers,
     seasons,
   };
 }

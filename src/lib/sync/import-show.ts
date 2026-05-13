@@ -38,6 +38,7 @@ export async function importShowFromTmdb(tmdbId: number): Promise<Show> {
       year: detail.year,
       runtime: detail.runtime,
       totalSeasons: detail.totalSeasons,
+      providers: detail.providers,
       syncPriority: 0,
       lastSyncedAt: new Date(),
       nextSyncAt: new Date(Date.now() + nextSyncMs(detail.status)),

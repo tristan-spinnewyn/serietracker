@@ -12,14 +12,27 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
   const typeParam = req.nextUrl.searchParams.get('type');
   const type = typeParam === 'SERIES' || typeParam === 'ANIME' ? typeParam as MediaType : null;
+  const onlyMyPlatforms = req.nextUrl.searchParams.get('onlyMyPlatforms') === 'true';
 
   if (q.length < 2) return NextResponse.json({ local: [], remote: [] });
+
+  let userPlatforms: string[] = [];
+  if (onlyMyPlatforms) {
+    const user = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { platforms: true },
+    });
+    userPlatforms = user?.platforms ?? [];
+  }
 
   // ── 1. Base locale ───────────────────────────────────────────────────────
   const local = await db.show.findMany({
     where: {
       title: { contains: q, mode: 'insensitive' },
       ...(type ? { type } : {}),
+      ...(onlyMyPlatforms && userPlatforms.length
+        ? { providers: { hasSome: userPlatforms } }
+        : {}),
     },
     take: 20,
     orderBy: { syncPriority: 'desc' },
@@ -39,9 +52,8 @@ export async function GET(req: NextRequest) {
       type !== 'SERIES' ? searchAnilist(q) : Promise.resolve([]),
     ]);
 
-    // Exclure les shows déjà en DB
-    const localTmdbIds  = new Set(local.map(s => s.tmdbId).filter(Boolean));
-    const localAniIds   = new Set(local.map(s => s.anilistId).filter(Boolean));
+    const localTmdbIds = new Set(local.map(s => s.tmdbId).filter(Boolean));
+    const localAniIds  = new Set(local.map(s => s.anilistId).filter(Boolean));
 
     const tmdbResults    = tmdb.status    === 'fulfilled' ? tmdb.value    : [];
     const anilistResults = anilist.status === 'fulfilled' ? anilist.value : [];

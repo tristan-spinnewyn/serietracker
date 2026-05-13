@@ -241,7 +241,6 @@ interface Props {
   notifyEnabled: boolean;
   followers: FollowerProps[];
   relations: RelationItem[];
-  currentUserId: string;
 }
 
 export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, followers, relations }: Props) {

@@ -96,6 +96,7 @@ model Show {
   year         Int?
   runtime      Int?
   totalSeasons Int        @default(0)
+  providers    String[]   @default([])
   syncPriority Int        @default(0)
   lastSyncedAt DateTime?
   nextSyncAt   DateTime?
