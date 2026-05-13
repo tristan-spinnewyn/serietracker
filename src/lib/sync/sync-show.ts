@@ -338,7 +338,7 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
         airingSchedule(notYetAired: false, perPage: 50) {
           nodes { episode airingAt }
         }
-        externalLinks { site type }
+        externalLinks { site type url }
         relations {
           edges {
             relationType
