@@ -245,7 +245,6 @@ interface Props {
 
 export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, followers, relations }: Props) {
   const router = useRouter();
-  const [tab, setTab] = useState('aperçu');
   const [openSeasons, setOpenSeasons] = useState<Set<string>>(
     () => new Set(seasons.find(s => s.watchedCount < s.episodeCount)?.id ? [seasons.find(s => s.watchedCount < s.episodeCount)!.id] : [])
   );
@@ -413,15 +412,6 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
             </div>
           </div>
         </div>
-      </div>
-
-      {/* ── Onglets ───────────────────────────────────────────── */}
-      <div className="detail-tabs">
-        {['Aperçu', 'Saisons'].map(t => (
-          <button key={t} className={`detail-tab ${tab === t.toLowerCase() ? 'on' : ''}`} onClick={() => setTab(t.toLowerCase())}>
-            {t}
-          </button>
-        ))}
       </div>
 
       <div className="detail-body">
