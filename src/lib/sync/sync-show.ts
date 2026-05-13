@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
-import { batchFetchAnilistData, parseAnilistProviders } from '@/lib/anilist/client';
+import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks } from '@/lib/anilist/client';
 import type { Show, ShowStatus, NotifType } from '@prisma/client';
 
 const DAY = 86_400_000;
@@ -113,6 +113,27 @@ async function syncFromTmdb(
   const newStatus = mapTmdbStatus(data.status);
   const newTotalSeasons: number = data.number_of_seasons ?? 0;
 
+  // Fetch providers + lien JustWatch (appel séparé)
+  const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+  const provRes = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers`, { headers: tmdbHeaders() }).catch(() => null);
+  let providerUpdate: { providers?: string[]; providerLinks?: Record<string, string> } = {};
+  if (provRes?.ok) {
+    const provData = await provRes.json();
+    const fr = provData.results?.FR;
+    if (fr) {
+      const TMDB_PROVIDER_MAP: Record<number, string> = {
+        8: 'netflix', 119: 'prime', 337: 'disney', 350: 'appletv',
+        63: 'canal', 283: 'crunchyroll', 1899: 'max', 493: 'arte', 2237: 'tf1', 430: 'hidive',
+      };
+      const all: { provider_id: number }[] = [...(fr.flatrate ?? []), ...(fr.free ?? [])];
+      const providers = [...new Set(all.map(p => TMDB_PROVIDER_MAP[p.provider_id]).filter(Boolean) as string[])];
+      const justWatchUrl: string | null = fr.link ?? null;
+      const providerLinks: Record<string, string> = {};
+      if (justWatchUrl) providers.forEach(k => { providerLinks[k] = justWatchUrl; });
+      providerUpdate = { providers, providerLinks };
+    }
+  }
+
   await db.show.update({
     where: { id: showId },
     data: {
@@ -122,6 +143,7 @@ async function syncFromTmdb(
       posterPath: data.poster_path ?? null,
       backdropPath: data.backdrop_path ?? null,
       totalSeasons: newTotalSeasons,
+      ...providerUpdate,
     },
   });
 
@@ -197,7 +219,7 @@ interface AnilistPayload {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
-  externalLinks?: Array<{ site: string; type: string }>;
+  externalLinks?: Array<{ site: string; type: string; url?: string }>;
   relations?: {
     edges: Array<{
       relationType: string;
@@ -268,9 +290,9 @@ async function checkAndNotifySequels(
 
 async function applyAnilistData(showId: string, payload: AnilistPayload): Promise<ShowStatus> {
   const newStatus = mapAnilistStatus(payload.status);
-  const providers = payload.externalLinks
-    ? parseAnilistProviders(payload.externalLinks)
-    : undefined;
+  const links = payload.externalLinks ?? [];
+  const providers = links.length ? parseAnilistProviders(links) : undefined;
+  const providerLinks = links.length ? parseAnilistProviderLinks(links) : undefined;
 
   await db.show.update({
     where: { id: showId },
@@ -281,6 +303,7 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
       posterPath: payload.coverImage?.extraLarge ?? null,
       backdropPath: payload.bannerImage ?? null,
       ...(providers !== undefined ? { providers } : {}),
+      ...(providerLinks !== undefined ? { providerLinks } : {}),
     },
   });
 

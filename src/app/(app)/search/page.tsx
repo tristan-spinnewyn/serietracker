@@ -91,7 +91,7 @@ function LocalCard({ show }: { show: Show }) {
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{show.year ?? '—'}</span>
-        <ProviderRow ids={show.providers ?? []} size={16} max={3} />
+        <ProviderRow ids={show.providers ?? []} links={show.providerLinks as Record<string, string> ?? {}} size={16} max={3} />
       </div>
     </button>
   );

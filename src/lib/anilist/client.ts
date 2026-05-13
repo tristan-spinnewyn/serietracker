@@ -32,6 +32,7 @@ export interface AnilistShowDetail extends AnilistSearchResult {
   totalSeasons: number;
   backdropPath: string | null;
   providers: string[];
+  providerLinks: Record<string, string>;
   episodes: AnilistEpisode[];
   relations: AnilistRelation[];
 }
@@ -102,7 +103,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
         airingSchedule(notYetAired: false, perPage: 50) {
           nodes { episode airingAt }
         }
-        externalLinks { site type }
+        externalLinks { site type url }
         relations {
           edges {
             relationType
@@ -148,9 +149,9 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
       };
     });
 
-  const providers = parseAnilistProviders(
-    (m.externalLinks as Array<{ site: string; type: string }> ?? [])
-  );
+  const rawLinks = m.externalLinks as Array<{ site: string; type: string; url?: string }> ?? [];
+  const providers = parseAnilistProviders(rawLinks);
+  const providerLinks = parseAnilistProviderLinks(rawLinks);
 
   return {
     anilistId,
@@ -167,6 +168,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
     runtime: m.duration as number ?? null,
     totalSeasons: 1,
     providers,
+    providerLinks,
     episodes,
     relations,
   };
@@ -194,12 +196,22 @@ const ANILIST_SITE_MAP: Record<string, string> = {
   'Canal+':                    'canal',
 };
 
-export function parseAnilistProviders(links: Array<{ site: string; type: string }>): string[] {
+export function parseAnilistProviders(links: Array<{ site: string; type: string; url?: string }>): string[] {
   const keys = links
     .filter(l => l.type === 'STREAMING')
     .map(l => ANILIST_SITE_MAP[l.site])
     .filter(Boolean) as string[];
   return [...new Set(keys)];
+}
+
+export function parseAnilistProviderLinks(links: Array<{ site: string; type: string; url?: string }>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const l of links) {
+    if (l.type !== 'STREAMING' || !l.url) continue;
+    const key = ANILIST_SITE_MAP[l.site];
+    if (key) result[key] = l.url;
+  }
+  return result;
 }
 
 // ── Batch sync (id_in) ────────────────────────────────────────────────────────
@@ -222,7 +234,7 @@ export interface AnilistSyncData {
   bannerImage?: string;
   description?: string;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
-  externalLinks?: Array<{ site: string; type: string }>;
+  externalLinks?: Array<{ site: string; type: string; url?: string }>;
   relations?: { edges: AnilistSyncRelation[] };
 }
 
@@ -244,7 +256,7 @@ export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, 
             airingSchedule(notYetAired: false, perPage: 50) {
               nodes { episode airingAt }
             }
-            externalLinks { site type }
+            externalLinks { site type url }
             relations {
               edges {
                 relationType

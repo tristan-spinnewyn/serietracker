@@ -211,7 +211,7 @@ interface ShowProps {
   year: number | null; overview: string | null;
   posterUrl: string | null; backdropUrl: string | null;
   network: string | null; genre: string | null;
-  runtime: number | null; totalSeasons: number; providers: string[];
+  runtime: number | null; totalSeasons: number; providers: string[]; providerLinks: Record<string, string>;
 }
 interface EpisodeProps {
   id: string; number: number; title: string;
@@ -595,7 +595,7 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
             ))}
             {show.providers.length > 0 && (
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
-                <ProviderRow ids={show.providers} size={22} label="Dispo sur" />
+                <ProviderRow ids={show.providers} links={show.providerLinks} size={22} label="Dispo sur" />
               </div>
             )}
           </div>

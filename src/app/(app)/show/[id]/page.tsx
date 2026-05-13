@@ -91,6 +91,7 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
         runtime: show.runtime,
         totalSeasons: show.totalSeasons,
         providers: show.providers,
+        providerLinks: show.providerLinks as Record<string, string>,
       }}
       seasons={show.seasons.map(s => ({
         id: s.id,

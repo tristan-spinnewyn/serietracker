@@ -24,6 +24,7 @@ export interface TmdbShowDetail extends TmdbSearchResult {
   totalSeasons: number;
   backdropPath: string | null;
   providers: string[];
+  providerLinks: Record<string, string>;
   seasons: TmdbSeason[];
 }
 
@@ -41,25 +42,30 @@ const TMDB_PROVIDER_MAP: Record<number, string> = {
   430:  'hidive',
 };
 
-async function fetchProviders(tmdbId: number): Promise<string[]> {
+async function fetchProviders(tmdbId: number): Promise<{ providers: string[]; providerLinks: Record<string, string> }> {
   const res = await fetch(
     `${BASE}/tv/${tmdbId}/watch/providers`,
     { headers: headers() },
   );
-  if (!res.ok) return [];
+  if (!res.ok) return { providers: [], providerLinks: {} };
   const data = await res.json();
   const fr = data.results?.FR;
-  if (!fr) return [];
+  if (!fr) return { providers: [], providerLinks: {} };
 
   const all: { provider_id: number }[] = [
     ...(fr.flatrate ?? []),
     ...(fr.free ?? []),
   ];
-  const keys = all
-    .map(p => TMDB_PROVIDER_MAP[p.provider_id])
-    .filter(Boolean) as string[];
+  const keys = [...new Set(
+    all.map(p => TMDB_PROVIDER_MAP[p.provider_id]).filter(Boolean) as string[]
+  )];
 
-  return [...new Set(keys)];
+  // JustWatch link (lien global du show en France)
+  const justWatchUrl: string | null = fr.link ?? null;
+  const providerLinks: Record<string, string> = {};
+  if (justWatchUrl) keys.forEach(k => { providerLinks[k] = justWatchUrl; });
+
+  return { providers: keys, providerLinks };
 }
 
 export interface TmdbSeason {
@@ -140,7 +146,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
   const genre = (d.genres ?? []).map((g: { name: string }) => g.name).join(' · ') || null;
   const network = d.networks?.[0]?.name ?? null;
   const runtime = d.episode_run_time?.[0] ?? null;
-  const providers = await fetchProviders(tmdbId);
+  const { providers, providerLinks } = await fetchProviders(tmdbId);
 
   return {
     tmdbId,
@@ -157,6 +163,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
     runtime,
     totalSeasons: d.number_of_seasons ?? 0,
     providers,
+    providerLinks,
     seasons,
   };
 }
