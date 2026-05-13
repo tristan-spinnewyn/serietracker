@@ -375,6 +375,11 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
               {show.network && <><span>{show.network}</span><span className="dot" /></>}
               {show.genre && <span>{show.genre}</span>}
             </div>
+            {show.providers.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <ProviderRow ids={show.providers} links={show.providerLinks} size={24} />
+              </div>
+            )}
             <div className="detail-actions">
               {nextEp && (
                 <button
