@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { apiFetch } from '@/lib/fetch';
 import type { ReleaseItem } from '@/app/api/releases/route';
@@ -33,84 +34,98 @@ function formatNextAiring(iso: string | null, ep: number | null) {
   return `Ep ${ep} · ${dayStr} · ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function ReleaseCard({ item, onImport }: { item: ReleaseItem; onImport: (item: ReleaseItem) => void }) {
-  const [importing, setImporting] = useState(false);
+function CardInner({ item }: { item: ReleaseItem }) {
   const ts = TYPE_STYLE[item.type];
   const nextAiring = formatNextAiring(item.nextAiringDate, item.nextAiringEpisode);
   const releaseDate = formatDate(item.releaseDate);
-  const canTrack = item.type === 'ANIME' && item.anilistId
-                || item.type === 'SERIES' && item.tmdbId;
-
-  const handleTrack = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setImporting(true);
-    onImport(item);
-  };
 
   return (
-    <div style={{
-      background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 14,
-      overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      transition: 'border-color .15s, transform .2s',
-    }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line-2)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
-    >
+    <>
       {/* Poster */}
       <div style={{ position: 'relative', aspectRatio: '2/3', overflow: 'hidden', background: 'var(--bg-2)' }}>
         {item.posterUrl
           ? <img src={item.posterUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ width: '100%', height: '100%', background: `linear-gradient(150deg, #1E1B4B, #6366F1)` }} />
+          : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(150deg, #1E1B4B, #6366F1)' }} />
         }
-        {/* Badge type */}
         <div style={{ position: 'absolute', top: 8, left: 8, padding: '2px 7px', borderRadius: 999, fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', backdropFilter: 'blur(6px)', background: ts.bg, color: ts.color }}>
           {ts.label}
         </div>
-        {/* Score */}
         {item.score !== null && (
           <div style={{ position: 'absolute', top: 8, right: 8, padding: '2px 7px', borderRadius: 999, fontSize: 11, fontWeight: 700, backdropFilter: 'blur(6px)', background: 'rgba(10,10,15,0.75)', color: scoreColor(item.score), fontFamily: 'JetBrains Mono, monospace' }}>
             ★ {item.score.toFixed(1)}
           </div>
         )}
-        {/* Statut */}
+        {item.localId && (
+          <div style={{ position: 'absolute', top: 8, right: 8, padding: '2px 7px', borderRadius: 999, fontSize: 9.5, fontWeight: 600, backdropFilter: 'blur(6px)', background: 'rgba(10,10,15,0.75)', color: '#6EE7B7', border: '1px solid rgba(52,211,153,0.3)' }}>
+            ✓ En liste
+          </div>
+        )}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(0deg, rgba(10,10,15,0.95) 0%, transparent 100%)', padding: '20px 10px 8px' }}>
           <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: ['En salles', "Aujourd'hui", 'En cours'].includes(item.status) ? '#6EE7B7' : '#FBBF24' }}>
             ● {item.status}
           </div>
         </div>
       </div>
-
       {/* Infos */}
       <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: '-0.01em', lineHeight: 1.25 }}>
-          {item.title}
-        </div>
+        <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{item.title}</div>
         {item.genre && <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{item.genre}</div>}
-
         {nextAiring ? (
           <div style={{ fontSize: 11, color: 'var(--anime)', fontWeight: 500 }}>{nextAiring}</div>
         ) : releaseDate ? (
           <div style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{releaseDate}</div>
         ) : null}
-
         {item.type === 'ANIME' && item.totalEpisodes && (
           <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'JetBrains Mono, monospace' }}>{item.totalEpisodes} ép.</div>
         )}
         {item.network && item.type === 'SERIES' && (
           <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{item.network}</div>
         )}
+      </div>
+    </>
+  );
+}
 
-        {canTrack && (
+const CARD_STYLE: React.CSSProperties = {
+  background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 14,
+  overflow: 'hidden', display: 'flex', flexDirection: 'column',
+  transition: 'border-color .15s, transform .2s', textDecoration: 'none', cursor: 'pointer',
+};
+
+function ReleaseCard({ item, onImport }: { item: ReleaseItem; onImport: (item: ReleaseItem) => void }) {
+  const [importing, setImporting] = useState(false);
+  const canTrack = (item.type === 'ANIME' && item.anilistId) || (item.type === 'SERIES' && item.tmdbId);
+
+  const onHover = (on: boolean) => (e: React.MouseEvent) => {
+    (e.currentTarget as HTMLElement).style.borderColor = on ? 'var(--line-2)' : 'var(--line)';
+    (e.currentTarget as HTMLElement).style.transform = on ? 'translateY(-2px)' : 'none';
+  };
+
+  // Déjà en base → carte cliquable vers la fiche
+  if (item.localId) {
+    return (
+      <Link href={`/show/${item.localId}`} style={CARD_STYLE} onMouseEnter={onHover(true)} onMouseLeave={onHover(false)}>
+        <CardInner item={item} />
+      </Link>
+    );
+  }
+
+  // Pas encore en base → bouton import
+  return (
+    <div style={CARD_STYLE} onMouseEnter={onHover(true)} onMouseLeave={onHover(false)}>
+      <CardInner item={item} />
+      {canTrack && (
+        <div style={{ padding: '0 12px 12px' }}>
           <button
-            onClick={handleTrack}
+            onClick={() => { setImporting(true); onImport(item); }}
             disabled={importing}
             className="btn"
-            style={{ marginTop: 'auto', justifyContent: 'center', fontSize: 12, paddingTop: 6, paddingBottom: 6, opacity: importing ? 0.6 : 1 }}
+            style={{ width: '100%', justifyContent: 'center', fontSize: 12, paddingTop: 6, paddingBottom: 6, opacity: importing ? 0.6 : 1 }}
           >
             {importing ? 'Import…' : <><Icon name="plus" size={12} /> Suivre</>}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

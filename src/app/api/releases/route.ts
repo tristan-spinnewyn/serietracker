@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { db } from '@/lib/db';
 
 const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
@@ -35,6 +36,7 @@ export interface ReleaseItem {
   network: string | null;
   tmdbId: number | null;
   anilistId: number | null;
+  localId: string | null;
 }
 
 // ── Films ─────────────────────────────────────────────────────────────────
@@ -193,7 +195,33 @@ export async function GET(req: NextRequest) {
     const movies = Array.from(moviesMap.values())
       .sort((a, b) => (a.releaseDate ?? '').localeCompare(b.releaseDate ?? ''));
 
-    return NextResponse.json({ movies, series: onAir, anime });
+    const allItems = [...movies, ...onAir, ...anime];
+
+    // Batch lookup : cherche quels items sont déjà en base
+    const anilistIds = allItems.map(i => i.anilistId).filter((id): id is number => id !== null);
+    const tmdbIds    = allItems.map(i => i.tmdbId).filter((id): id is number => id !== null);
+
+    const [inDbAnilist, inDbTmdb] = await Promise.all([
+      anilistIds.length ? db.show.findMany({ where: { anilistId: { in: anilistIds } }, select: { id: true, anilistId: true } }) : [],
+      tmdbIds.length    ? db.show.findMany({ where: { tmdbId:    { in: tmdbIds    } }, select: { id: true, tmdbId:    true } }) : [],
+    ]);
+
+    const byAnilist = new Map(inDbAnilist.map(s => [s.anilistId, s.id]));
+    const byTmdb    = new Map(inDbTmdb.map(s => [s.tmdbId, s.id]));
+
+    const withLocalId = (items: ReleaseItem[]) =>
+      items.map(i => ({
+        ...i,
+        localId: i.anilistId ? (byAnilist.get(i.anilistId) ?? null)
+                : i.tmdbId   ? (byTmdb.get(i.tmdbId)    ?? null)
+                : null,
+      }));
+
+    return NextResponse.json({
+      movies: withLocalId(movies),
+      series: withLocalId(onAir),
+      anime:  withLocalId(anime),
+    });
   } catch (err) {
     console.error('[GET /api/releases]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
