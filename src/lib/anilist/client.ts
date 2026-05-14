@@ -214,6 +214,55 @@ export function parseAnilistProviderLinks(links: Array<{ site: string; type: str
   return result;
 }
 
+// ── Liste utilisateur ────────────────────────────────────────────────────────
+
+export type AnilistWatchStatus = 'CURRENT' | 'COMPLETED' | 'PLANNING' | 'DROPPED' | 'PAUSED' | 'REPEATING';
+
+export interface AnilistListEntry {
+  anilistId: number;
+  title: string;
+  status: AnilistWatchStatus;
+  score: number; // 0-100
+}
+
+export async function fetchAnilistUserList(username: string): Promise<AnilistListEntry[] | null> {
+  const query = `
+    query ($userName: String) {
+      MediaListCollection(userName: $userName, type: ANIME) {
+        lists {
+          entries {
+            status
+            score(format: POINT_100)
+            media { id title { english romaji } }
+          }
+        }
+      }
+    }
+  `;
+
+  const data = await gql<{ MediaListCollection: { lists: { entries: unknown[] }[] } | null }>(
+    query, { userName: username }
+  );
+  if (!data) return null;
+  if (!data.MediaListCollection) return null;
+
+  const entries: AnilistListEntry[] = [];
+  for (const list of data.MediaListCollection.lists) {
+    for (const raw of list.entries) {
+      const e = raw as Record<string, unknown>;
+      const media = e.media as Record<string, unknown>;
+      const title = media.title as Record<string, string>;
+      entries.push({
+        anilistId: media.id as number,
+        title: title.english ?? title.romaji,
+        status: e.status as AnilistWatchStatus,
+        score: (e.score as number) ?? 0,
+      });
+    }
+  }
+  return entries;
+}
+
 // ── Batch sync (id_in) ────────────────────────────────────────────────────────
 
 export interface AnilistSyncRelation {
