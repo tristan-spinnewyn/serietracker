@@ -572,22 +572,36 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 ~{Math.round(totalWatched * show.runtime / 60)}h regardées · {Math.round((totalEps - totalWatched) * show.runtime / 60)}h restantes
               </div>
             )}
-            {userStatus && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 12 }}>
+          </div>
+
+          {/* Notation */}
+          {userStatus && (
+            <div className="side-card">
+              <h3>Ma note</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, margin: '10px 0 8px' }}>
                 {[1, 2, 3, 4, 5].map(star => (
                   <button
                     key={star}
                     onClick={() => handleRate(star)}
                     onMouseEnter={() => setHoverRating(star)}
                     onMouseLeave={() => setHoverRating(null)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: 18, lineHeight: 1, color: (hoverRating ?? rating ?? 0) >= star ? '#FBBF24' : 'var(--line-2)', transition: 'color .1s' }}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '2px 4px', fontSize: 28, lineHeight: 1,
+                      color: (hoverRating ?? rating ?? 0) >= star ? '#FBBF24' : 'var(--line-2)',
+                      transition: 'color .12s',
+                    }}
                     title={`${star} étoile${star > 1 ? 's' : ''}`}
                   >★</button>
                 ))}
-                {rating && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>{rating}/5</span>}
               </div>
-            )}
-          </div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                {rating
+                  ? <><span style={{ color: '#FBBF24', fontWeight: 600 }}>{rating}</span><span> / 5</span></>
+                  : 'Pas encore noté'}
+              </div>
+            </div>
+          )}
 
           {/* Prochain épisode */}
           {nextEp && (
