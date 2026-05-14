@@ -181,7 +181,7 @@ export default async function DashboardPage() {
       {planRows.length > 0 && (
         <>
           <div className="section-h">
-            <h2>À voir <span className="count">· {planRows.length}</span></h2>
+            <h2>À regarder <span className="count">· {planRows.length}</span></h2>
             <Link href="/lists" className="see-all">Mes listes <Icon name="chevR" size={14} /></Link>
           </div>
           <div className="poster-grid">

@@ -202,7 +202,7 @@ const STATUS_LABEL: Record<string, string> = {
   UPCOMING: 'À venir', IN_PRODUCTION: 'En production',
 };
 const WATCH_LABEL: Record<string, string> = {
-  WATCHING: 'En cours', COMPLETED: 'Terminé', PLAN_TO_WATCH: 'À voir',
+  WATCHING: 'En cours', COMPLETED: 'Terminé', PLAN_TO_WATCH: 'À regarder',
   DROPPED: 'Abandonné', PAUSED: 'En pause',
 };
 
@@ -412,11 +412,16 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
               )}
               <button
                 className="btn"
-                onClick={() => handleStatus(userStatus === 'WATCHING' ? 'PAUSED' : 'WATCHING')}
+                onClick={() => {
+                  if (!userStatus) handleStatus('PLAN_TO_WATCH');
+                  else if (userStatus === 'PLAN_TO_WATCH') handleStatus('WATCHING');
+                  else if (userStatus === 'WATCHING') handleStatus('PAUSED');
+                  else handleStatus('WATCHING');
+                }}
                 disabled={isPending}
               >
                 <Icon name="check" size={14} />
-                {userStatus ? WATCH_LABEL[userStatus] : 'Ajouter'}
+                {userStatus ? WATCH_LABEL[userStatus] : 'À regarder'}
               </button>
               <button
                 className={`btn ${notifyEnabled ? 'active' : ''}`}

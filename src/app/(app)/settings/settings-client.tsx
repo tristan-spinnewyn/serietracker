@@ -14,7 +14,7 @@ const COLORS = [
 const STATUS_LABELS: Record<string, string> = {
   WATCHING:      'En cours',
   COMPLETED:     'Terminés',
-  PLAN_TO_WATCH: 'À voir',
+  PLAN_TO_WATCH: 'À regarder',
   PAUSED:        'En pause',
   DROPPED:       'Abandonnés',
 };
