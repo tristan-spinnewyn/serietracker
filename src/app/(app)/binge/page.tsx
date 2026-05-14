@@ -15,7 +15,7 @@ export default async function BingePage() {
     db.userShow.findMany({
       where: {
         userId,
-        status: { in: ['WATCHING', 'PAUSED'] },
+        status: { in: ['WATCHING', 'PAUSED', 'PLAN_TO_WATCH'] },
         show: { type: 'ANIME', status: { in: ['ENDED', 'CANCELED'] } },
       },
       include: {
