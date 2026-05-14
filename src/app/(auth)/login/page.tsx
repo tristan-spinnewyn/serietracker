@@ -80,13 +80,11 @@ function LoginForm() {
         {isPending ? 'Connexion…' : <><Icon name="chevR" size={14} /> Se connecter</>}
       </button>
 
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{ textAlign: 'center', marginTop: 4 }}>
-          <Link href="/register" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
-            Créer un compte →
-          </Link>
-        </div>
-      )}
+      <div style={{ textAlign: 'center', marginTop: 4 }}>
+        <Link href="/register" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+          Créer un compte →
+        </Link>
+      </div>
     </form>
   );
 }
