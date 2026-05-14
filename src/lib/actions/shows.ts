@@ -134,6 +134,19 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
   const session = await getSession();
 
   if (watched) {
+    // Auto-ajoute le show en WATCHING s'il n'est pas encore dans la liste
+    const episode = await db.episode.findUnique({
+      where: { id: episodeId },
+      select: { season: { select: { showId: true } } },
+    });
+    if (episode) {
+      await db.userShow.upsert({
+        where: { userId_showId: { userId: session.user.id, showId: episode.season.showId } },
+        update: {},
+        create: { userId: session.user.id, showId: episode.season.showId, status: 'WATCHING' },
+      });
+    }
+
     await db.userEpisode.upsert({
       where: { userId_episodeId: { userId: session.user.id, episodeId } },
       update: {},
