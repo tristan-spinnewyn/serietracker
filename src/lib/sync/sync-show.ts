@@ -279,6 +279,7 @@ type SequelInfo = { anilistId: number; status: string; title: string };
 async function checkAndNotifySequels(
   showId: string,
   showTitle: string,
+  parentAnilistId: number | null,
   relations: AnilistPayload['relations'],
 ): Promise<void> {
   const sequels: SequelInfo[] = (relations?.edges ?? [])
@@ -292,46 +293,68 @@ async function checkAndNotifySequels(
 
   if (!sequels.length) return;
 
-  // Garder uniquement les séquelles pas encore importées dans la DB
-  const existing = await db.show.findMany({
-    where: { anilistId: { in: sequels.map(s => s.anilistId) } },
-    select: { anilistId: true },
-  });
-  const existingIds = new Set(existing.map(s => s.anilistId));
-  const unimported = sequels.filter(s => !existingIds.has(s.anilistId));
-  if (!unimported.length) return;
-
-  // Éviter les doublons : pas de notif SHOW_RETURNING pour ce show dans les 30 derniers jours
-  const since = new Date(Date.now() - 30 * DAY);
-  const already = await db.notification.findFirst({
-    where: { showId, type: 'SHOW_RETURNING', createdAt: { gte: since } },
-  });
-  if (already) return;
-
   const subscribers = await db.userShow.findMany({
     where: { showId, notifyEnabled: true },
     select: { userId: true },
   });
   if (!subscribers.length) return;
 
-  const sequel = unimported[0];
-  const body = sequel.status === 'RELEASING'
-    ? `Suite en cours de diffusion : ${sequel.title}`
-    : `Suite annoncée : ${sequel.title}`;
+  // Map anilistId → dbId pour les suites déjà en base
+  const inDb = await db.show.findMany({
+    where: { anilistId: { in: sequels.map(s => s.anilistId) } },
+    select: { id: true, anilistId: true },
+  });
+  const inDbMap = new Map(inDb.map(s => [s.anilistId, s.id]));
 
-  const notifs = subscribers.map(({ userId }) => ({
-    userId,
-    type: 'SHOW_RETURNING' as NotifType,
-    title: showTitle,
-    body,
-    showId,
-  }));
+  let notifSent = false;
 
-  await db.notification.createMany({ data: notifs });
-  const userIds = [...new Set(notifs.map(n => n.userId))];
-  await Promise.allSettled(
-    userIds.map(userId => sendPushToUser(userId, { title: showTitle, body })),
-  );
+  for (const sequel of sequels) {
+    let sequelDbId = inDbMap.get(sequel.anilistId) ?? null;
+
+    // Suite pas encore en base → on l'importe
+    if (!sequelDbId) {
+      try {
+        // Import dynamique pour éviter la dépendance circulaire (import-show → sync-show)
+        const { importShowFromAnilist } = await import('@/lib/sync/import-show');
+        const visited = new Set(parentAnilistId ? [parentAnilistId] : [] as number[]);
+        const imported = await importShowFromAnilist(sequel.anilistId, visited);
+        sequelDbId = imported.id;
+
+        // Notif push — une seule fois par show par 30 jours
+        if (!notifSent) {
+          const since = new Date(Date.now() - 30 * DAY);
+          const already = await db.notification.findFirst({
+            where: { showId, type: 'SHOW_RETURNING', createdAt: { gte: since } },
+          });
+          if (!already) {
+            const body = sequel.status === 'RELEASING'
+              ? `Suite en cours de diffusion : ${sequel.title}`
+              : `Suite annoncée : ${sequel.title}`;
+            const notifs = subscribers.map(({ userId }) => ({
+              userId, type: 'SHOW_RETURNING' as NotifType, title: showTitle, body, showId,
+            }));
+            await db.notification.createMany({ data: notifs });
+            const userIds = [...new Set(notifs.map(n => n.userId))];
+            await Promise.allSettled(userIds.map(uid => sendPushToUser(uid, { title: showTitle, body })));
+            notifSent = true;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!sequelDbId) continue;
+
+    // Ajoute la suite en À regarder pour chaque abonné qui ne l'a pas encore
+    for (const { userId } of subscribers) {
+      await db.userShow.upsert({
+        where: { userId_showId: { userId, showId: sequelDbId } },
+        update: {},
+        create: { userId, showId: sequelDbId, status: 'PLAN_TO_WATCH' },
+      });
+    }
+  }
 }
 
 async function applyAnilistData(showId: string, payload: AnilistPayload): Promise<ShowStatus> {
@@ -407,7 +430,7 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
   const newStatus = await applyAnilistData(showId, payload);
 
   const show = await db.show.findUnique({ where: { id: showId }, select: { title: true } });
-  if (show) await checkAndNotifySequels(showId, show.title, payload.relations);
+  if (show) await checkAndNotifySequels(showId, show.title, anilistId, payload.relations);
   await syncRelations(showId, payload.relations);
 
   return { newStatus };
@@ -472,7 +495,7 @@ export async function batchSyncAnilistShows(
       });
 
       await notifyChanges(show.id, show.title, show.status, newStatus, show.totalSeasons, show.totalSeasons);
-      await checkAndNotifySequels(show.id, show.title, payload.relations);
+      await checkAndNotifySequels(show.id, show.title, show.anilistId, payload.relations);
       await syncRelations(show.id, payload.relations);
       synced++;
     } catch {
