@@ -149,27 +149,26 @@ export default async function DashboardPage() {
         </>
       )}
 
-      {planRows.length > 0 && (
-        <>
-          <div className="section-h">
-            <h2>À regarder <span className="count">· {planRows.length}</span></h2>
-            <Link href="/lists" className="see-all">Mes listes <Icon name="chevR" size={14} /></Link>
-          </div>
-          <div className="poster-grid">
-            {planRows.map(us => (
-              <Link key={us.show.id} href={`/show/${us.show.id}`} style={{ display: 'block' }}>
-                <Poster title={us.show.title} type={us.show.type} imageUrl={posterUrl(us.show)} />
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
       <div className="two-col" style={{ marginTop: 16 }}>
         <div>
-          {upcomingItems.length > 0 && (
+          {planRows.length > 0 && (
             <>
               <div className="section-h">
+                <h2>À regarder <span className="count">· {planRows.length}</span></h2>
+                <Link href="/lists" className="see-all">Mes listes <Icon name="chevR" size={14} /></Link>
+              </div>
+              <div className="poster-grid">
+                {planRows.map(us => (
+                  <Link key={us.show.id} href={`/show/${us.show.id}`} style={{ display: 'block' }}>
+                    <Poster title={us.show.title} type={us.show.type} imageUrl={posterUrl(us.show)} />
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+          {upcomingItems.length > 0 && (
+            <>
+              <div className="section-h" style={{ marginTop: planRows.length > 0 ? 24 : 0 }}>
                 <h2>À venir cette semaine <span className="count">· {upcomingItems.length}</span></h2>
                 <Link href="/calendar" className="see-all">Calendrier <Icon name="chevR" size={14} /></Link>
               </div>
