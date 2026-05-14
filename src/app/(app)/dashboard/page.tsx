@@ -149,6 +149,22 @@ export default async function DashboardPage() {
         </>
       )}
 
+      {planRows.length > 0 && (
+        <>
+          <div className="section-h">
+            <h2>À regarder <span className="count">· {planRows.length}</span></h2>
+            <Link href="/lists" className="see-all">Mes listes <Icon name="chevR" size={14} /></Link>
+          </div>
+          <div className="poster-grid">
+            {planRows.map(us => (
+              <Link key={us.show.id} href={`/show/${us.show.id}`} style={{ display: 'block' }}>
+                <Poster title={us.show.title} type={us.show.type} imageUrl={posterUrl(us.show)} />
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="two-col" style={{ marginTop: 16 }}>
         <div>
           {upcomingItems.length > 0 && (
@@ -176,22 +192,6 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
-
-      {planRows.length > 0 && (
-        <>
-          <div className="section-h">
-            <h2>À regarder <span className="count">· {planRows.length}</span></h2>
-            <Link href="/lists" className="see-all">Mes listes <Icon name="chevR" size={14} /></Link>
-          </div>
-          <div className="poster-grid">
-            {planRows.map(us => (
-              <Link key={us.show.id} href={`/show/${us.show.id}`} style={{ display: 'block' }}>
-                <Poster title={us.show.title} type={us.show.type} imageUrl={posterUrl(us.show)} />
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
 
       {nowCards.length === 0 && planRows.length === 0 && (
         <div className="empty" style={{ marginTop: 40 }}>
