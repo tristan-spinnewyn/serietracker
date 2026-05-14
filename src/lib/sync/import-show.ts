@@ -59,9 +59,33 @@ export async function importShowFromAnilist(
   visited: Set<number> = new Set(),
   skipRelations = false,
 ): Promise<Show> {
-  // Si déjà en DB → retour direct sans re-fetch
   const existing = await db.show.findUnique({ where: { anilistId } });
-  if (existing) return existing;
+  if (existing) {
+    // Appel récursif → retour immédiat pour couper les cycles
+    if (visited.size > 0) return existing;
+    // Appel de niveau supérieur : synce les relations avec les shows déjà en base
+    const detail = await fetchAnilistDetail(anilistId);
+    if (detail) {
+      for (const rel of detail.relations) {
+        try {
+          const relShow = await db.show.findUnique({ where: { anilistId: rel.anilistId } });
+          if (!relShow) continue;
+          const relType = RELATION_MAP[rel.relationType] ?? 'RELATED';
+          await db.showRelation.upsert({
+            where: { fromShowId_toShowId: { fromShowId: existing.id, toShowId: relShow.id } },
+            update: {},
+            create: { fromShowId: existing.id, toShowId: relShow.id, type: relType },
+          });
+          await db.showRelation.upsert({
+            where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: existing.id } },
+            update: {},
+            create: { fromShowId: relShow.id, toShowId: existing.id, type: inverseType(relType) },
+          });
+        } catch { /* skip */ }
+      }
+    }
+    return existing;
+  }
 
   // Marquer comme "en cours d'import" pour couper les cycles
   if (visited.has(anilistId)) {
