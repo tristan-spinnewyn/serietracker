@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
+import { db } from '@/lib/db';
 import { importShowFromTmdb, importShowFromAnilist } from '@/lib/sync/import-show';
 
 const schema = z.union([
@@ -20,6 +21,38 @@ export async function POST(req: NextRequest) {
     const show = 'tmdbId' in parsed.data
       ? await importShowFromTmdb(parsed.data.tmdbId)
       : await importShowFromAnilist(parsed.data.anilistId);
+
+    const userId = session.user.id;
+
+    // Ajoute le show importé en PLAN_TO_WATCH (sans écraser un statut existant)
+    await db.userShow.upsert({
+      where: { userId_showId: { userId, showId: show.id } },
+      update: {},
+      create: { userId, showId: show.id, status: 'PLAN_TO_WATCH' },
+    });
+
+    // Pour les animes : ajoute aussi les prequelles et suites en PLAN_TO_WATCH
+    if (show.type === 'ANIME') {
+      const relations = await db.showRelation.findMany({
+        where: {
+          OR: [{ fromShowId: show.id }, { toShowId: show.id }],
+          type: { in: ['SEQUEL', 'PREQUEL'] },
+        },
+        select: { fromShowId: true, toShowId: true },
+      });
+
+      const relatedIds = relations.map(r =>
+        r.fromShowId === show.id ? r.toShowId : r.fromShowId
+      );
+
+      for (const showId of relatedIds) {
+        await db.userShow.upsert({
+          where: { userId_showId: { userId, showId } },
+          update: {},
+          create: { userId, showId, status: 'PLAN_TO_WATCH' },
+        });
+      }
+    }
 
     return NextResponse.json({ id: show.id });
   } catch (err) {
