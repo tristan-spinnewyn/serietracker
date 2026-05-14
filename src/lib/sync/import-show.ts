@@ -57,6 +57,7 @@ export async function importShowFromTmdb(tmdbId: number): Promise<Show> {
 export async function importShowFromAnilist(
   anilistId: number,
   visited: Set<number> = new Set(),
+  skipRelations = false,
 ): Promise<Show> {
   // Si déjà en DB → retour direct sans re-fetch
   const existing = await db.show.findUnique({ where: { anilistId } });
@@ -109,6 +110,8 @@ export async function importShowFromAnilist(
       });
     }
   }
+
+  if (skipRelations) return show;
 
   // Relations — on propage le même visited pour suivre toute la chaîne
   // S5 → S4 → S3 → S2 → S1 sans limite de profondeur, juste sans cycles

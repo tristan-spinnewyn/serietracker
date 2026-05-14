@@ -1,13 +1,27 @@
 import type { ShowStatus } from '@prisma/client';
 
 const ENDPOINT = 'https://graphql.anilist.co';
+const MIN_INTERVAL_MS = 700; // 90 req/min → ~667ms min, on prend 700ms
 
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
+let lastRequestAt = 0;
+
+async function gql<T>(query: string, variables: Record<string, unknown>, attempt = 0): Promise<T | null> {
+  const wait = MIN_INTERVAL_MS - (Date.now() - lastRequestAt);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastRequestAt = Date.now();
+
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),
   });
+
+  if (res.status === 429 && attempt < 3) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10);
+    await new Promise(r => setTimeout(r, retryAfter * 1000));
+    return gql(query, variables, attempt + 1);
+  }
+
   if (!res.ok) return null;
   const json = await res.json();
   if (json.errors?.length) return null;

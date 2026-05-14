@@ -35,7 +35,7 @@ export async function syncFromAnilist(username: string): Promise<SyncResult> {
 
   for (const entry of entries) {
     try {
-      const show = await importShowFromAnilist(entry.anilistId);
+      const show = await importShowFromAnilist(entry.anilistId, new Set(), true);
       const watchStatus = STATUS_MAP[entry.status] ?? 'PLAN_TO_WATCH';
 
       const existing = await db.userShow.findUnique({
