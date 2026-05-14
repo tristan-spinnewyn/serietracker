@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { Poster } from '@/components/ui/poster';
 import { Icon } from '@/components/ui/icon';
 import { posterUrl } from '@/lib/constants';
+import { MarkAllWatchedButton } from './mark-all-button';
 
 export default async function TerminePage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
   const session = await auth();
@@ -51,6 +52,7 @@ export default async function TerminePage({ searchParams }: { searchParams: Prom
               : 'Aucun show terminé pour l\'instant.'}
           </div>
         </div>
+        {completed.length > 0 && <MarkAllWatchedButton />}
       </div>
 
       {/* Filtres */}
