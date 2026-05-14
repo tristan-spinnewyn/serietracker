@@ -38,7 +38,6 @@ export default async function DashboardPage() {
       where: { userId, status: 'PLAN_TO_WATCH' },
       include: { show: true },
       orderBy: { updatedAt: 'desc' },
-      take: 6,
     }),
     // Épisodes à venir cette semaine
     db.episode.findMany({
