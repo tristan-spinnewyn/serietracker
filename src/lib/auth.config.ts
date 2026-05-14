@@ -10,7 +10,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth: session, request: { nextUrl } }) {
       const isLoggedIn = !!session?.user;
-      const PUBLIC = ['/login', '/register', '/api/auth'];
+      const PUBLIC = ['/login', '/register', '/api/auth', '/api/health'];
       if (PUBLIC.some(p => nextUrl.pathname.startsWith(p))) return true;
       if (isLoggedIn) return true;
       return false;
