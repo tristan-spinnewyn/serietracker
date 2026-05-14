@@ -1,7 +1,7 @@
 import type { ShowStatus } from '@prisma/client';
 
 const ENDPOINT = 'https://graphql.anilist.co';
-const MIN_INTERVAL_MS = 700; // 90 req/min → ~667ms min, on prend 700ms
+const MIN_INTERVAL_MS = 2000; // dégradé: 30 req/min → 2000ms min
 
 let lastRequestAt = 0;
 
