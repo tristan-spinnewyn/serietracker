@@ -1,7 +1,53 @@
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
 import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks } from '@/lib/anilist/client';
-import type { Show, ShowStatus, NotifType } from '@prisma/client';
+import type { Show, ShowStatus, NotifType, RelationType } from '@prisma/client';
+
+const RELATION_MAP: Record<string, RelationType> = {
+  SEQUEL:      'SEQUEL',
+  PREQUEL:     'PREQUEL',
+  SIDE_STORY:  'SPINOFF',
+  ALTERNATIVE: 'ALTERNATIVE',
+  PARENT:      'PARENT',
+  OTHER:       'RELATED',
+};
+
+function inverseRelationType(t: RelationType): RelationType {
+  if (t === 'SEQUEL')  return 'PREQUEL';
+  if (t === 'PREQUEL') return 'SEQUEL';
+  if (t === 'PARENT')  return 'SPINOFF';
+  return t;
+}
+
+async function syncRelations(
+  showId: string,
+  relations: AnilistPayload['relations'],
+): Promise<void> {
+  const KEPT = new Set(['SEQUEL', 'PREQUEL', 'SIDE_STORY', 'ALTERNATIVE', 'PARENT']);
+  const edges = (relations?.edges ?? [])
+    .filter(e => KEPT.has(e.relationType) && e.node.type === 'ANIME');
+
+  for (const edge of edges) {
+    const relShow = await db.show.findUnique({
+      where: { anilistId: edge.node.id },
+      select: { id: true },
+    });
+    if (!relShow) continue; // pas encore importé → skip
+
+    const relType = RELATION_MAP[edge.relationType] ?? 'RELATED';
+
+    await db.showRelation.upsert({
+      where: { fromShowId_toShowId: { fromShowId: showId, toShowId: relShow.id } },
+      update: {},
+      create: { fromShowId: showId, toShowId: relShow.id, type: relType },
+    });
+    await db.showRelation.upsert({
+      where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: showId } },
+      update: {},
+      create: { fromShowId: relShow.id, toShowId: showId, type: inverseRelationType(relType) },
+    });
+  }
+}
 
 const DAY = 86_400_000;
 
@@ -362,6 +408,7 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
 
   const show = await db.show.findUnique({ where: { id: showId }, select: { title: true } });
   if (show) await checkAndNotifySequels(showId, show.title, payload.relations);
+  await syncRelations(showId, payload.relations);
 
   return { newStatus };
 }
@@ -426,6 +473,7 @@ export async function batchSyncAnilistShows(
 
       await notifyChanges(show.id, show.title, show.status, newStatus, show.totalSeasons, show.totalSeasons);
       await checkAndNotifySequels(show.id, show.title, payload.relations);
+      await syncRelations(show.id, payload.relations);
       synced++;
     } catch {
       errors++;
