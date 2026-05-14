@@ -6,6 +6,43 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import type { WatchStatus } from '@prisma/client';
 
+// Auto-passe le show en COMPLETED quand tous les épisodes sont vus (show terminé/annulé)
+async function checkShowComplete(userId: string, episodeIds: string[]) {
+  const eps = await db.episode.findMany({
+    where: { id: { in: episodeIds } },
+    select: { season: { select: { showId: true } } },
+  });
+  const showIds = [...new Set(eps.map(e => e.season.showId))];
+
+  for (const showId of showIds) {
+    const [show, userShow] = await Promise.all([
+      db.show.findUnique({ where: { id: showId }, select: { status: true } }),
+      db.userShow.findUnique({
+        where: { userId_showId: { userId, showId } },
+        select: { status: true },
+      }),
+    ]);
+
+    // Seulement si le show a fini de diffuser et que l'user le regardait / l'avait mis en pause
+    if (!show || !['ENDED', 'CANCELED'].includes(show.status)) continue;
+    if (!userShow || !['WATCHING', 'PAUSED'].includes(userShow.status)) continue;
+
+    const [totalEps, watchedEps] = await Promise.all([
+      db.episode.count({ where: { season: { showId } } }),
+      db.userEpisode.count({ where: { userId, episode: { season: { showId } } } }),
+    ]);
+
+    if (totalEps > 0 && watchedEps >= totalEps) {
+      await db.userShow.update({
+        where: { userId_showId: { userId, showId } },
+        data: { status: 'COMPLETED' },
+      });
+      revalidatePath('/dashboard');
+      revalidatePath(`/show/${showId}`);
+    }
+  }
+}
+
 async function checkSeasonComplete(userId: string, episodeIds: string[]) {
   if (!episodeIds.length) return;
 
@@ -103,6 +140,7 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
       create: { userId: session.user.id, episodeId },
     });
     await checkSeasonComplete(session.user.id, [episodeId]);
+    await checkShowComplete(session.user.id, [episodeId]);
   } else {
     await db.userEpisode.delete({
       where: { userId_episodeId: { userId: session.user.id, episodeId } },
@@ -138,6 +176,7 @@ export async function markEpisodesWatchedBatch(episodeIds: string[]) {
   );
 
   await checkSeasonComplete(session.user.id, episodeIds);
+  await checkShowComplete(session.user.id, episodeIds);
   revalidatePath('/show/[id]', 'page');
 }
 
