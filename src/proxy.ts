@@ -7,7 +7,7 @@ const { auth } = NextAuth(authConfig);
 export const proxy = auth((req) => {
   const { pathname } = req.nextUrl;
 
-  const PUBLIC = ['/login', '/register', '/api/auth'];
+  const PUBLIC = ['/login', '/register', '/api/auth', '/api/health'];
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
 
   if (!req.auth) {
