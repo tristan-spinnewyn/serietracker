@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { apiFetch } from '@/lib/fetch';
+import { upsertUserShow } from '@/lib/actions/shows';
 import type { ReleaseItem } from '@/app/api/releases/route';
 
 type Filter = 'all' | 'movies' | 'series' | 'anime';
@@ -86,6 +87,34 @@ function CardInner({ item }: { item: ReleaseItem }) {
   );
 }
 
+function AddToListButton({ localId }: { localId: string }) {
+  const [done, setDone] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (done) return;
+    startTransition(async () => {
+      await upsertUserShow({ showId: localId, status: 'PLAN_TO_WATCH' });
+      setDone(true);
+    });
+  };
+
+  return (
+    <div style={{ padding: '0 12px 12px' }}>
+      <button
+        onClick={handleClick}
+        disabled={isPending || done}
+        className="btn"
+        style={{ width: '100%', justifyContent: 'center', fontSize: 12, paddingTop: 6, paddingBottom: 6, opacity: isPending ? 0.6 : 1 }}
+      >
+        {done ? <><Icon name="check" size={12} /> Ajouté</> : isPending ? 'Ajout…' : <><Icon name="plus" size={12} /> À regarder</>}
+      </button>
+    </div>
+  );
+}
+
 const CARD_STYLE: React.CSSProperties = {
   background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 14,
   overflow: 'hidden', display: 'flex', flexDirection: 'column',
@@ -103,9 +132,13 @@ function ReleaseCard({ item, onImport }: { item: ReleaseItem; onImport: (item: R
 
   // Déjà en base → carte cliquable vers la fiche
   if (item.localId) {
+    const localId = item.localId;
     return (
-      <Link href={`/show/${item.localId}`} style={CARD_STYLE} onMouseEnter={onHover(true)} onMouseLeave={onHover(false)}>
+      <Link href={`/show/${localId}`} style={CARD_STYLE} onMouseEnter={onHover(true)} onMouseLeave={onHover(false)}>
         <CardInner item={item} />
+        {!item.userHasShow && (
+          <AddToListButton localId={localId} />
+        )}
       </Link>
     );
   }

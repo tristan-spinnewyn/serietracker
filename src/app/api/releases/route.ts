@@ -37,6 +37,7 @@ export interface ReleaseItem {
   tmdbId: number | null;
   anilistId: number | null;
   localId: string | null;
+  userHasShow: boolean;
 }
 
 // ── Films ─────────────────────────────────────────────────────────────────
@@ -209,13 +210,23 @@ export async function GET(req: NextRequest) {
     const byAnilist = new Map(inDbAnilist.map(s => [s.anilistId, s.id]));
     const byTmdb    = new Map(inDbTmdb.map(s => [s.tmdbId, s.id]));
 
+    // Vérifie quels shows sont déjà dans la liste de l'utilisateur
+    const localIds = [...byAnilist.values(), ...byTmdb.values()];
+    const userShows = localIds.length
+      ? await db.userShow.findMany({
+          where: { userId: session.user.id, showId: { in: localIds } },
+          select: { showId: true },
+        })
+      : [];
+    const inUserList = new Set(userShows.map(us => us.showId));
+
     const withLocalId = (items: ReleaseItem[]) =>
-      items.map(i => ({
-        ...i,
-        localId: i.anilistId ? (byAnilist.get(i.anilistId) ?? null)
-                : i.tmdbId   ? (byTmdb.get(i.tmdbId)    ?? null)
-                : null,
-      }));
+      items.map(i => {
+        const localId = i.anilistId ? (byAnilist.get(i.anilistId) ?? null)
+                      : i.tmdbId   ? (byTmdb.get(i.tmdbId)    ?? null)
+                      : null;
+        return { ...i, localId, userHasShow: localId ? inUserList.has(localId) : false };
+      });
 
     return NextResponse.json({
       movies: withLocalId(movies),
