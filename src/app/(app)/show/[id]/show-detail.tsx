@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { ProviderRow } from '@/components/ui/provider-logo';
-import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow, removeUserShow, rateShow } from '@/lib/actions/shows';
+import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow, removeUserShow, rateShow, markShowAllWatched } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
 import type { WatchStatus, RelationType } from '@prisma/client';
@@ -338,6 +338,12 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
     startTransition(() => rateShow(show.id, next));
   };
 
+  const handleMarkAllWatched = () => {
+    const allIds = seasons.flatMap(s => s.episodes.map(e => e.id));
+    setWatched(new Set(allIds));
+    startTransition(() => markShowAllWatched(show.id));
+  };
+
   const handleMarkUpTo = (season: SeasonProps, epId: string) => {
     const idx = season.episodes.findIndex(e => e.id === epId);
     const toMark = season.episodes
@@ -571,6 +577,16 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
               <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 8 }}>
                 ~{Math.round(totalWatched * show.runtime / 60)}h regardées · {Math.round((totalEps - totalWatched) * show.runtime / 60)}h restantes
               </div>
+            )}
+            {totalWatched < totalEps && (
+              <button
+                className="btn"
+                style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+                onClick={handleMarkAllWatched}
+                disabled={isPending}
+              >
+                <Icon name="check" size={14} />Tout marquer comme vu
+              </button>
             )}
           </div>
 

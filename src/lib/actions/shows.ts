@@ -223,6 +223,41 @@ export async function markAllCompletedEpisodesWatched(): Promise<{ count: number
   return { count: result.count };
 }
 
+// ── Tout marquer comme vu et passer en Terminé ──────────────────────────────
+
+export async function markShowAllWatched(showId: string) {
+  const session = await getSession();
+  const userId = session.user.id;
+
+  await db.userShow.upsert({
+    where: { userId_showId: { userId, showId } },
+    update: {},
+    create: { userId, showId, status: 'WATCHING' },
+  });
+
+  const episodes = await db.episode.findMany({
+    where: { season: { showId } },
+    select: { id: true },
+  });
+
+  if (!episodes.length) return;
+
+  await db.userEpisode.createMany({
+    data: episodes.map(ep => ({ userId, episodeId: ep.id })),
+    skipDuplicates: true,
+  });
+
+  await db.userShow.update({
+    where: { userId_showId: { userId, showId } },
+    data: { status: 'COMPLETED' },
+  });
+
+  await checkSeasonComplete(userId, episodes.map(e => e.id));
+
+  revalidatePath(`/show/${showId}`);
+  revalidatePath('/dashboard');
+}
+
 // ── Toggle notification pour un show ────────────────────────────────────────
 
 export async function toggleShowNotif(showId: string, enabled: boolean) {
