@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
-import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks } from '@/lib/anilist/client';
+import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks, buildAnilistEpisodes } from '@/lib/anilist/client';
 import type { Show, ShowStatus, NotifType, RelationType } from '@prisma/client';
 
 const RELATION_MAP: Record<string, RelationType> = {
@@ -264,6 +264,7 @@ interface AnilistPayload {
   coverImage?: { extraLarge?: string };
   bannerImage?: string;
   description?: string;
+  episodes?: number | null;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
   externalLinks?: Array<{ site: string; type: string; url?: string }>;
   relations?: {
@@ -376,7 +377,7 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
     },
   });
 
-  const episodes = payload.airingSchedule?.nodes ?? [];
+  const episodes = buildAnilistEpisodes(payload.airingSchedule?.nodes, payload.episodes);
   if (episodes.length > 0) {
     const season = await db.season.upsert({
       where: { showId_number: { showId, number: 1 } },
@@ -385,9 +386,9 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
     });
     for (const ep of episodes) {
       await db.episode.upsert({
-        where: { seasonId_number: { seasonId: season.id, number: ep.episode } },
-        update: { airDate: new Date(ep.airingAt * 1000) },
-        create: { seasonId: season.id, number: ep.episode, airDate: new Date(ep.airingAt * 1000) },
+        where: { seasonId_number: { seasonId: season.id, number: ep.number } },
+        update: ep.airDate ? { airDate: ep.airDate } : {},
+        create: { seasonId: season.id, number: ep.number, airDate: ep.airDate },
       });
     }
   }
@@ -404,6 +405,7 @@ async function syncFromAnilist(showId: string, anilistId: number): Promise<{ new
         coverImage { extraLarge }
         bannerImage
         description(asHtml: false)
+        episodes
         airingSchedule(notYetAired: false, perPage: 50) {
           nodes { episode airingAt }
         }

@@ -61,28 +61,13 @@ export async function importShowFromAnilist(
 ): Promise<Show> {
   const existing = await db.show.findUnique({ where: { anilistId } });
   if (existing) {
-    // Appel récursif → retour immédiat pour couper les cycles
-    if (visited.size > 0) return existing;
-    // Appel de niveau supérieur : synce les relations avec les shows déjà en base
-    const detail = await fetchAnilistDetail(anilistId);
-    if (detail) {
-      for (const rel of detail.relations) {
-        try {
-          const relShow = await db.show.findUnique({ where: { anilistId: rel.anilistId } });
-          if (!relShow) continue;
-          const relType = RELATION_MAP[rel.relationType] ?? 'RELATED';
-          await db.showRelation.upsert({
-            where: { fromShowId_toShowId: { fromShowId: existing.id, toShowId: relShow.id } },
-            update: {},
-            create: { fromShowId: existing.id, toShowId: relShow.id, type: relType },
-          });
-          await db.showRelation.upsert({
-            where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: existing.id } },
-            update: {},
-            create: { fromShowId: relShow.id, toShowId: existing.id, type: inverseType(relType) },
-          });
-        } catch { /* skip */ }
-      }
+    // Appel récursif déjà traité → cycle break
+    if (visited.has(anilistId)) return existing;
+    // Premier passage sur ce show : marquer puis reconstruire la chaîne de relations
+    // avec les autres shows déjà en base (utile au re-import quand des liens manquent)
+    visited.add(anilistId);
+    if (!skipRelations) {
+      await syncExistingRelationsChain(existing.id, anilistId, visited);
     }
     return existing;
   }
@@ -167,6 +152,45 @@ function inverseType(t: RelationType): RelationType {
   if (t === 'PREQUEL') return 'SEQUEL';
   if (t === 'PARENT')  return 'SPINOFF';
   return t;
+}
+
+// Pour un show déjà en base : crée/répare les liens avec les autres shows en base
+// puis propage récursivement la même opération à chaque show lié non-encore-visité.
+// Permet au re-import d'une saison de rebrancher toute la chaîne (S1↔S2↔S3↔…).
+async function syncExistingRelationsChain(
+  showId: string,
+  anilistId: number,
+  visited: Set<number>,
+): Promise<void> {
+  const detail = await fetchAnilistDetail(anilistId);
+  if (!detail) return;
+
+  for (const rel of detail.relations) {
+    try {
+      const relShow = await db.show.findUnique({
+        where: { anilistId: rel.anilistId },
+        select: { id: true },
+      });
+      if (!relShow) continue; // pas en base → on n'importe pas, juste on relie ce qui existe
+
+      const relType = RELATION_MAP[rel.relationType] ?? 'RELATED';
+      await db.showRelation.upsert({
+        where: { fromShowId_toShowId: { fromShowId: showId, toShowId: relShow.id } },
+        update: {},
+        create: { fromShowId: showId, toShowId: relShow.id, type: relType },
+      });
+      await db.showRelation.upsert({
+        where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: showId } },
+        update: {},
+        create: { fromShowId: relShow.id, toShowId: showId, type: inverseType(relType) },
+      });
+
+      if (!visited.has(rel.anilistId)) {
+        visited.add(rel.anilistId);
+        await syncExistingRelationsChain(relShow.id, rel.anilistId, visited);
+      }
+    } catch { /* skip */ }
+  }
 }
 
 async function syncSeasons(showId: string, seasons: TmdbSeason[]) {

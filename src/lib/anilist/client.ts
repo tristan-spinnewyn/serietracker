@@ -56,6 +56,25 @@ export interface AnilistEpisode {
   airDate: Date | null;
 }
 
+// Fusionne airingSchedule + Media.episodes : AniList ne fournit pas toujours
+// le schedule complet pour les vieux animes finis. On comble avec des épisodes
+// sans airDate pour que le compte total soit correct.
+export function buildAnilistEpisodes(
+  scheduleNodes: Array<{ episode: number; airingAt: number }> | null | undefined,
+  totalEpisodes: number | null | undefined,
+): AnilistEpisode[] {
+  const byNumber = new Map<number, AnilistEpisode>();
+  for (const n of scheduleNodes ?? []) {
+    byNumber.set(n.episode, { number: n.episode, airDate: new Date(n.airingAt * 1000) });
+  }
+  const maxScheduled = byNumber.size ? Math.max(...byNumber.keys()) : 0;
+  const total = Math.max(totalEpisodes ?? 0, maxScheduled);
+  for (let i = 1; i <= total; i++) {
+    if (!byNumber.has(i)) byNumber.set(i, { number: i, airDate: null });
+  }
+  return Array.from(byNumber.values()).sort((a, b) => a.number - b.number);
+}
+
 export interface AnilistRelation {
   anilistId: number;
   title: string;
@@ -141,11 +160,9 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
   const coverImage = m.coverImage as Record<string, string>;
   const startDate = m.startDate as Record<string, number>;
   const airingSchedule = m.airingSchedule as { nodes: { episode: number; airingAt: number }[] };
+  const totalEpisodes = m.episodes as number | null;
 
-  const episodes: AnilistEpisode[] = (airingSchedule?.nodes ?? []).map(n => ({
-    number: n.episode,
-    airDate: new Date(n.airingAt * 1000),
-  }));
+  const episodes = buildAnilistEpisodes(airingSchedule?.nodes, totalEpisodes);
 
   const KEPT_RELATIONS = new Set(['SEQUEL', 'PREQUEL', 'SIDE_STORY', 'ALTERNATIVE', 'PARENT']);
   const relationsRaw = (m.relations as { edges: { relationType: string; node: Record<string, unknown> }[] })?.edges ?? [];
@@ -296,6 +313,7 @@ export interface AnilistSyncData {
   coverImage?: { extraLarge?: string };
   bannerImage?: string;
   description?: string;
+  episodes?: number | null;
   airingSchedule?: { nodes: Array<{ episode: number; airingAt: number }> };
   externalLinks?: Array<{ site: string; type: string; url?: string }>;
   relations?: { edges: AnilistSyncRelation[] };
@@ -316,6 +334,7 @@ export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, 
             coverImage { extraLarge }
             bannerImage
             description(asHtml: false)
+            episodes
             airingSchedule(notYetAired: false, perPage: 50) {
               nodes { episode airingAt }
             }
