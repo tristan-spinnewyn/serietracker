@@ -11,6 +11,24 @@ const LOW_REMAINING_THRESHOLD = 5; // backoff proactif quand on s'approche de la
 // On le réserve AVANT le fetch → race-safe entre callers concurrents (cron + resync manuel + import).
 let nextSlotAt = 0;
 
+// Quand AniList nous dit explicitement "API désactivée", on coupe les appels pour
+// API_DISABLED_COOLDOWN_MS. Évite de spammer pendant les outages (cron sinon flush
+// tous ses slots dans le vide). Cf. log "temporarily disabled".
+const API_DISABLED_COOLDOWN_MS = 5 * 60_000;
+let apiDisabledUntil = 0;
+// Mémorise la dernière erreur AniList pour enrichir les exceptions des callers
+let lastAnilistErrorMessage: string | null = null;
+
+export function getLastAnilistError(): string | null {
+  return lastAnilistErrorMessage;
+}
+
+function isApiDisabledError(errors: AnilistGqlError[] | undefined): boolean {
+  return !!errors?.some(e =>
+    typeof e.message === 'string' && /api has been temporarily disabled/i.test(e.message)
+  );
+}
+
 interface AnilistGqlError {
   message?: string;
   status?: number;
@@ -29,6 +47,10 @@ function formatAnilistErrors(errors: AnilistGqlError[] | undefined): string {
 }
 
 async function gql<T>(query: string, variables: Record<string, unknown>, attempt = 0): Promise<T | null> {
+  // Court-circuit : AniList nous a récemment dit "API désactivée" → on évite d'envoyer
+  // (et on garde l'erreur en cache pour les callers qui veulent l'inclure dans leurs messages)
+  if (Date.now() < apiDisabledUntil) return null;
+
   const now = Date.now();
   const mySlot = Math.max(now, nextSlotAt);
   nextSlotAt = mySlot + MIN_INTERVAL_MS;
@@ -65,12 +87,25 @@ async function gql<T>(query: string, variables: Record<string, unknown>, attempt
 
   const errors = body?.errors;
   if (errors?.length) {
-    console.error(`[AniList] HTTP ${res.status} — ${formatAnilistErrors(errors)}`);
+    const formatted = formatAnilistErrors(errors);
+    lastAnilistErrorMessage = formatted;
+    console.error(`[AniList] HTTP ${res.status} — ${formatted}`);
   } else if (!res.ok) {
-    console.error(`[AniList] HTTP ${res.status} — ${rawText?.slice(0, 300) ?? '(no body)'}`);
+    const fallback = rawText?.slice(0, 300) ?? '(no body)';
+    lastAnilistErrorMessage = `HTTP ${res.status} — ${fallback}`;
+    console.error(`[AniList] HTTP ${res.status} — ${fallback}`);
+  } else if (res.ok) {
+    lastAnilistErrorMessage = null;
   }
 
-  // 429 (rate limit) et 403 (Cloudflare bot/anti-flood ou API suspendue) sont retentables
+  // API désactivée explicitement par AniList → fail-fast, pas de retry
+  // (retenter dans 12s ne fera que gâcher des slots, l'outage dure souvent des heures)
+  if (isApiDisabledError(errors)) {
+    apiDisabledUntil = Date.now() + API_DISABLED_COOLDOWN_MS;
+    return null;
+  }
+
+  // 429 (rate limit) et 403 (Cloudflare bot/anti-flood) sont retentables
   if ((res.status === 429 || res.status === 403) && attempt < 3) {
     const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10);
     const delayMs =
@@ -426,9 +461,12 @@ export async function batchFetchAnilistData(
     `;
 
     const data = await gql<{ Page: { media: AnilistSyncData[] } }>(query, { ids: chunk });
-    // gql() retourne null après épuisement des retries (403/429 persistants ou erreur réseau)
+    // gql() retourne null en cas d'erreur (API désactivée, 403/429 persistants, réseau, etc.)
     if (data === null && throwOnApiFailure) {
-      throw new AnilistApiError('AniList API indisponible (Cloudflare 403/429 après 3 retries)');
+      const reason = getLastAnilistError();
+      throw new AnilistApiError(
+        reason ? `AniList API indisponible — ${reason}` : 'AniList API indisponible (voir logs serveur)',
+      );
     }
     for (const media of data?.Page?.media ?? []) {
       result.set(media.id, media);
