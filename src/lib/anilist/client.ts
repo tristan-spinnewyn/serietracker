@@ -11,6 +11,23 @@ const LOW_REMAINING_THRESHOLD = 5; // backoff proactif quand on s'approche de la
 // On le réserve AVANT le fetch → race-safe entre callers concurrents (cron + resync manuel + import).
 let nextSlotAt = 0;
 
+interface AnilistGqlError {
+  message?: string;
+  status?: number;
+  locations?: unknown;
+}
+interface AnilistGqlResponse<T> {
+  data?: T | null;
+  errors?: AnilistGqlError[];
+}
+
+function formatAnilistErrors(errors: AnilistGqlError[] | undefined): string {
+  if (!errors?.length) return '';
+  return errors
+    .map(e => `[${e.status ?? '?'}] ${(e.message ?? '(no message)').trim()}`)
+    .join(' | ');
+}
+
 async function gql<T>(query: string, variables: Record<string, unknown>, attempt = 0): Promise<T | null> {
   const now = Date.now();
   const mySlot = Math.max(now, nextSlotAt);
@@ -36,7 +53,24 @@ async function gql<T>(query: string, variables: Record<string, unknown>, attempt
     if (resetAtMs > nextSlotAt) nextSlotAt = resetAtMs;
   }
 
-  // 429 (rate limit) et 403 (Cloudflare bot/anti-flood) sont retentables
+  // AniList renvoie le message d'erreur dans le corps même en cas de 4xx
+  // (API suspendue, IP bloquée, rate limit, syntax error…). On parse toujours.
+  let body: AnilistGqlResponse<T> | null = null;
+  let rawText: string | null = null;
+  try {
+    body = await res.json() as AnilistGqlResponse<T>;
+  } catch {
+    try { rawText = await res.text(); } catch { /* abandon */ }
+  }
+
+  const errors = body?.errors;
+  if (errors?.length) {
+    console.error(`[AniList] HTTP ${res.status} — ${formatAnilistErrors(errors)}`);
+  } else if (!res.ok) {
+    console.error(`[AniList] HTTP ${res.status} — ${rawText?.slice(0, 300) ?? '(no body)'}`);
+  }
+
+  // 429 (rate limit) et 403 (Cloudflare bot/anti-flood ou API suspendue) sont retentables
   if ((res.status === 429 || res.status === 403) && attempt < 3) {
     const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10);
     const delayMs =
@@ -48,18 +82,15 @@ async function gql<T>(query: string, variables: Record<string, unknown>, attempt
   }
 
   if (!res.ok) return null;
-  const json = await res.json();
 
   // Cas défensif : AniList peut renvoyer HTTP 200 avec un 429 dans le corps GraphQL
-  const isBodyRateLimited = Array.isArray(json.errors)
-    && json.errors.some((e: { status?: number }) => e.status === 429);
-  if (isBodyRateLimited && attempt < 3) {
+  if (errors?.some(e => e.status === 429) && attempt < 3) {
     await new Promise(r => setTimeout(r, 60_000));
     return gql(query, variables, attempt + 1);
   }
 
-  if (json.errors?.length) return null;
-  return json.data ?? null;
+  if (errors?.length) return null;
+  return body?.data ?? null;
 }
 
 export interface AnilistSearchResult {
