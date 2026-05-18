@@ -398,7 +398,8 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
 
 async function syncFromAnilist(showId: string, anilistId: number): Promise<{ newStatus: ShowStatus }> {
   // Passe par batchFetchAnilistData (helper gql() partagé) → rate-limit, retry 429/403, UA
-  const batch = await batchFetchAnilistData([anilistId]);
+  // throwOnApiFailure → AnilistApiError clair si Cloudflare nous bloque, au lieu d'un faux "introuvable"
+  const batch = await batchFetchAnilistData([anilistId], { throwOnApiFailure: true });
   const media = batch.get(anilistId);
   if (!media) throw new Error(`AniList ${anilistId} introuvable`);
 

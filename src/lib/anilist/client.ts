@@ -1,14 +1,21 @@
 import type { ShowStatus } from '@prisma/client';
 
 const ENDPOINT = 'https://graphql.anilist.co';
-const MIN_INTERVAL_MS = 2000; // dégradé: 30 req/min → 2000ms min
+// AniList est en mode dégradé : 30 req/min annoncé (au lieu de 90).
+// 60_000 / 2_000 = 30 req/min max → on tient pile dans la limite, sans burst.
+// Doc : https://docs.anilist.co/guide/rate-limiting
+const MIN_INTERVAL_MS = 2000;
+const LOW_REMAINING_THRESHOLD = 5; // backoff proactif quand on s'approche de la limite
 
-let lastRequestAt = 0;
+// nextSlotAt = timestamp ms du prochain envoi autorisé.
+// On le réserve AVANT le fetch → race-safe entre callers concurrents (cron + resync manuel + import).
+let nextSlotAt = 0;
 
 async function gql<T>(query: string, variables: Record<string, unknown>, attempt = 0): Promise<T | null> {
-  const wait = MIN_INTERVAL_MS - (Date.now() - lastRequestAt);
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  lastRequestAt = Date.now();
+  const now = Date.now();
+  const mySlot = Math.max(now, nextSlotAt);
+  nextSlotAt = mySlot + MIN_INTERVAL_MS;
+  if (mySlot > now) await new Promise(r => setTimeout(r, mySlot - now));
 
   const res = await fetch(ENDPOINT, {
     method: 'POST',
@@ -21,16 +28,36 @@ async function gql<T>(query: string, variables: Record<string, unknown>, attempt
     body: JSON.stringify({ query, variables }),
   });
 
+  // Backoff proactif : si on s'approche de la limite, on saute jusqu'au reset
+  const remaining = parseInt(res.headers.get('X-RateLimit-Remaining') ?? '', 10);
+  const resetTs = parseInt(res.headers.get('X-RateLimit-Reset') ?? '', 10);
+  if (!Number.isNaN(remaining) && remaining <= LOW_REMAINING_THRESHOLD && resetTs > 0) {
+    const resetAtMs = resetTs * 1000 + 500;
+    if (resetAtMs > nextSlotAt) nextSlotAt = resetAtMs;
+  }
+
   // 429 (rate limit) et 403 (Cloudflare bot/anti-flood) sont retentables
   if ((res.status === 429 || res.status === 403) && attempt < 3) {
     const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10);
-    const delay = retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1);
-    await new Promise(r => setTimeout(r, delay));
+    const delayMs =
+      resetTs > 0       ? Math.max(0, resetTs * 1000 - Date.now()) + 500 :
+      retryAfter > 0    ? retryAfter * 1000 :
+      /* fallback */      2000 * (attempt + 1);
+    await new Promise(r => setTimeout(r, delayMs));
     return gql(query, variables, attempt + 1);
   }
 
   if (!res.ok) return null;
   const json = await res.json();
+
+  // Cas défensif : AniList peut renvoyer HTTP 200 avec un 429 dans le corps GraphQL
+  const isBodyRateLimited = Array.isArray(json.errors)
+    && json.errors.some((e: { status?: number }) => e.status === 429);
+  if (isBodyRateLimited && attempt < 3) {
+    await new Promise(r => setTimeout(r, 60_000));
+    return gql(query, variables, attempt + 1);
+  }
+
   if (json.errors?.length) return null;
   return json.data ?? null;
 }
@@ -326,7 +353,17 @@ export interface AnilistSyncData {
   relations?: { edges: AnilistSyncRelation[] };
 }
 
-export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, AnilistSyncData>> {
+export class AnilistApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AnilistApiError';
+  }
+}
+
+export async function batchFetchAnilistData(
+  ids: number[],
+  { throwOnApiFailure = false }: { throwOnApiFailure?: boolean } = {},
+): Promise<Map<number, AnilistSyncData>> {
   const result = new Map<number, AnilistSyncData>();
   const CHUNK = 50;
 
@@ -358,13 +395,14 @@ export async function batchFetchAnilistData(ids: number[]): Promise<Map<number, 
     `;
 
     const data = await gql<{ Page: { media: AnilistSyncData[] } }>(query, { ids: chunk });
+    // gql() retourne null après épuisement des retries (403/429 persistants ou erreur réseau)
+    if (data === null && throwOnApiFailure) {
+      throw new AnilistApiError('AniList API indisponible (Cloudflare 403/429 après 3 retries)');
+    }
     for (const media of data?.Page?.media ?? []) {
       result.set(media.id, media);
     }
-
-    if (i + CHUNK < ids.length) {
-      await new Promise(r => setTimeout(r, 700));
-    }
+    // Pas de sleep entre les chunks : gql() gère déjà l'espacement via nextSlotAt
   }
 
   return result;

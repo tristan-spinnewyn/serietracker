@@ -136,7 +136,11 @@ async function fetchAiringAnime(): Promise<ReleaseItem[]> {
 
   const res = await fetch(ANILIST, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': 'SeriesTracker/1.0 (+self-hosted)',
+    },
     body: JSON.stringify({ query, variables: { season, year } }),
     next: { revalidate: 3600 },
   });
