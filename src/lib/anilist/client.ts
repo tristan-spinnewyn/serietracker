@@ -12,13 +12,20 @@ async function gql<T>(query: string, variables: Record<string, unknown>, attempt
 
   const res = await fetch(ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      // Cloudflare devant graphql.anilist.co renvoie 403 aux requêtes sans UA identifiable
+      'User-Agent': 'SeriesTracker/1.0 (+self-hosted)',
+    },
     body: JSON.stringify({ query, variables }),
   });
 
-  if (res.status === 429 && attempt < 3) {
-    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10);
-    await new Promise(r => setTimeout(r, retryAfter * 1000));
+  // 429 (rate limit) et 403 (Cloudflare bot/anti-flood) sont retentables
+  if ((res.status === 429 || res.status === 403) && attempt < 3) {
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10);
+    const delay = retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1);
+    await new Promise(r => setTimeout(r, delay));
     return gql(query, variables, attempt + 1);
   }
 

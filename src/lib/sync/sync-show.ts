@@ -397,38 +397,12 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
 }
 
 async function syncFromAnilist(showId: string, anilistId: number): Promise<{ newStatus: ShowStatus }> {
-  const query = `
-    query ($id: Int) {
-      Media(id: $id, type: ANIME) {
-        id status
-        title { english romaji }
-        coverImage { extraLarge }
-        bannerImage
-        description(asHtml: false)
-        episodes
-        airingSchedule(notYetAired: false, perPage: 50) {
-          nodes { episode airingAt }
-        }
-        externalLinks { site type url }
-        relations {
-          edges {
-            relationType
-            node { id type status title { english romaji } }
-          }
-        }
-      }
-    }
-  `;
-  const res = await fetch('https://graphql.anilist.co', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, variables: { id: anilistId } }),
-  });
-  if (!res.ok) throw new Error(`AniList ${res.status}`);
-  const { data } = await res.json();
-  if (!data?.Media) throw new Error(`AniList ${anilistId} introuvable`);
+  // Passe par batchFetchAnilistData (helper gql() partagé) → rate-limit, retry 429/403, UA
+  const batch = await batchFetchAnilistData([anilistId]);
+  const media = batch.get(anilistId);
+  if (!media) throw new Error(`AniList ${anilistId} introuvable`);
 
-  const payload = data.Media as AnilistPayload;
+  const payload = media as AnilistPayload;
   const newStatus = await applyAnilistData(showId, payload);
 
   const show = await db.show.findUnique({ where: { id: showId }, select: { title: true } });
