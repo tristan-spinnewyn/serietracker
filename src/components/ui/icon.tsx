@@ -5,7 +5,7 @@ type IconName =
   | 'bell' | 'settings' | 'play' | 'plus' | 'check'
   | 'chevR' | 'chevL' | 'chevD' | 'chevU' | 'more'
   | 'grip' | 'filter' | 'star' | 'share' | 'sparkle'
-  | 'eye' | 'x' | 'binge';
+  | 'eye' | 'x' | 'binge' | 'menu';
 
 interface IconProps {
   name: IconName;
@@ -38,6 +38,7 @@ const paths: Record<IconName, React.ReactNode> = {
   eye:      <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></>,
   x:        <path d="M18 6L6 18M6 6l12 12"/>,
   binge:    <><path d="M5 3l14 9-14 9V3z" fill="currentColor" stroke="none"/><path d="M19 9h2M19 15h2"/></>,
+  menu:     <><path d="M4 6h16M4 12h16M4 18h16"/></>,
 };
 
 export function Icon({ name, size = 18, className, style }: IconProps) {

@@ -22,6 +22,15 @@ export function Topbar() {
 
   return (
     <div className="topbar">
+      <button
+        type="button"
+        className="icon-btn mobile-menu-btn"
+        aria-label="Ouvrir la navigation"
+        onClick={() => window.dispatchEvent(new Event('toggle-mobile-nav'))}
+      >
+        <Icon name="menu" size={18} />
+      </button>
+
       <div className="crumbs">
         {isShow ? (
           <>

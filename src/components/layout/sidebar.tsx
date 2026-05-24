@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -60,12 +61,23 @@ function ListSection({ title, items }: { title: string; items: SidebarList[] }) 
 export function Sidebar({ lists, user, unreadCount }: { lists: SidebarList[]; user: SidebarUser; unreadCount: number }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    const handler = () => setOpen(o => !o);
+    window.addEventListener('toggle-mobile-nav', handler);
+    return () => window.removeEventListener('toggle-mobile-nav', handler);
+  }, []);
 
   const myLists     = lists.filter(l => l.mine);
   const sharedLists = lists.filter(l => !l.mine);
 
   return (
-    <aside className="sidebar">
+    <>
+    {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
+    <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
         <div className="brand-mark" />
         <div className="brand-name">
@@ -137,5 +149,6 @@ export function Sidebar({ lists, user, unreadCount }: { lists: SidebarList[]; us
         </button>
       </div>
     </aside>
+    </>
   );
 }

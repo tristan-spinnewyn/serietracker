@@ -695,10 +695,36 @@ a { color: inherit; text-decoration: none; }
 .main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
 .main::-webkit-scrollbar-track { background: transparent; }
 
+/* Mobile menu button — hidden on desktop */
+.mobile-menu-btn { display: none; }
+.sidebar-backdrop { display: none; }
+
 /* Responsive */
 @media (max-width: 768px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 199;
+  }
+  .mobile-menu-btn { display: flex; }
+  .topbar { padding: 14px 16px; }
+  .search-mini { display: none; }
   .now-row { grid-template-columns: repeat(2, 1fr); }
   .poster-grid { grid-template-columns: repeat(3, 1fr); }
   .two-col { grid-template-columns: 1fr; }
