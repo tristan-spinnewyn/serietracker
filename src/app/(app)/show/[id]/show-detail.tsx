@@ -406,16 +406,6 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
               </div>
             )}
             <div className="detail-actions">
-              {nextEp && (
-                <button
-                  className="btn primary"
-                  onClick={() => handleToggleEp(nextEp.id)}
-                  disabled={isPending}
-                >
-                  <Icon name="play" size={12} />
-                  Reprendre · S{nextEp.seasonNumber} E{nextEp.episodeNumber}
-                </button>
-              )}
               <button
                 className="btn"
                 onClick={() => {

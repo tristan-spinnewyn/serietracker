@@ -6,10 +6,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Icon } from '@/components/ui/icon';
 
-type NavIcon = 'home' | 'calendar' | 'binge' | 'search' | 'lists' | 'bell' | 'star' | 'check';
+type NavIcon = 'home' | 'calendar' | 'binge' | 'search' | 'lists' | 'bell' | 'star' | 'check' | 'library';
 
 const NAV_ITEMS: { id: string; href: string; label: string; icon: NavIcon; badgeNew?: boolean }[] = [
   { id: 'home',          href: '/dashboard',     label: 'Accueil',            icon: 'home' },
+  { id: 'library',       href: '/library',       label: 'Bibliothèque',       icon: 'library' },
   { id: 'calendar',      href: '/calendar',      label: 'Calendrier',         icon: 'calendar' },
   { id: 'sorties',       href: '/sorties',       label: 'Sorties',            icon: 'star' },
   { id: 'binge',         href: '/binge',         label: 'Diffusion terminée', icon: 'binge' },

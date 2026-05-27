@@ -235,24 +235,33 @@ export async function markShowAllWatched(showId: string) {
     create: { userId, showId, status: 'WATCHING' },
   });
 
-  const episodes = await db.episode.findMany({
-    where: { season: { showId } },
+  const now = new Date();
+  const airedEpisodes = await db.episode.findMany({
+    where: {
+      season: { showId },
+      OR: [{ airDate: null }, { airDate: { lte: now } }],
+    },
     select: { id: true },
   });
 
-  if (!episodes.length) return;
+  if (!airedEpisodes.length) return;
 
   await db.userEpisode.createMany({
-    data: episodes.map(ep => ({ userId, episodeId: ep.id })),
+    data: airedEpisodes.map(ep => ({ userId, episodeId: ep.id })),
     skipDuplicates: true,
   });
 
+  const totalEpisodes = await db.episode.count({
+    where: { season: { showId } },
+  });
+  const allAired = airedEpisodes.length === totalEpisodes;
+
   await db.userShow.update({
     where: { userId_showId: { userId, showId } },
-    data: { status: 'COMPLETED' },
+    data: { status: allAired ? 'COMPLETED' : 'WATCHING' },
   });
 
-  await checkSeasonComplete(userId, episodes.map(e => e.id));
+  await checkSeasonComplete(userId, airedEpisodes.map(e => e.id));
 
   revalidatePath(`/show/${showId}`);
   revalidatePath('/dashboard');
