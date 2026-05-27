@@ -143,14 +143,19 @@ function ReleaseCard({ item, onImport }: { item: ReleaseItem; onImport: (item: R
     );
   }
 
-  // Pas encore en base → bouton import
+  // Pas encore en base → clic importe et navigue vers la fiche
   return (
-    <div style={CARD_STYLE} onMouseEnter={onHover(true)} onMouseLeave={onHover(false)}>
+    <div
+      style={CARD_STYLE}
+      onMouseEnter={onHover(true)}
+      onMouseLeave={onHover(false)}
+      onClick={() => { if (!importing && canTrack) { setImporting(true); onImport(item); } }}
+    >
       <CardInner item={item} />
       {canTrack && (
         <div style={{ padding: '0 12px 12px' }}>
           <button
-            onClick={() => { setImporting(true); onImport(item); }}
+            onClick={e => { e.stopPropagation(); setImporting(true); onImport(item); }}
             disabled={importing}
             className="btn"
             style={{ width: '100%', justifyContent: 'center', fontSize: 12, paddingTop: 6, paddingBottom: 6, opacity: importing ? 0.6 : 1 }}

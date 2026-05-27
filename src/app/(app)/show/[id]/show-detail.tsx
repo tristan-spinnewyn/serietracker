@@ -339,8 +339,8 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
   };
 
   const handleMarkAllWatched = () => {
-    const allIds = seasons.flatMap(s => s.episodes.map(e => e.id));
-    setWatched(new Set(allIds));
+    const airedIds = seasons.flatMap(s => s.episodes.filter(e => e.hasAired).map(e => e.id));
+    setWatched(prev => { const next = new Set(prev); airedIds.forEach(id => next.add(id)); return next; });
     startTransition(() => markShowAllWatched(show.id));
   };
 
