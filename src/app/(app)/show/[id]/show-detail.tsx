@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { ProviderRow } from '@/components/ui/provider-logo';
-import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow, removeUserShow, rateShow, markShowAllWatched } from '@/lib/actions/shows';
+import { toggleEpisode, upsertUserShow, toggleShowNotif, markEpisodesWatchedBatch, resyncShow, removeUserShow, rateShow, markShowAllWatched, unmarkShowAllWatched } from '@/lib/actions/shows';
 import { addShowToList, linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
 import type { WatchStatus, RelationType } from '@prisma/client';
@@ -344,6 +344,12 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
     startTransition(() => markShowAllWatched(show.id));
   };
 
+  const handleUnmarkAllWatched = () => {
+    setWatched(new Set());
+    startTransition(() => unmarkShowAllWatched(show.id));
+    router.refresh();
+  };
+
   const handleMarkUpTo = (season: SeasonProps, epId: string) => {
     const idx = season.episodes.findIndex(e => e.id === epId);
     const toMark = season.episodes
@@ -362,6 +368,7 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
 
   const totalWatched = seasons.reduce((a, s) => a + s.episodes.filter(e => watched.has(e.id)).length, 0);
   const totalEps = seasons.reduce((a, s) => a + s.episodeCount, 0);
+  const hasUnwatchedAired = seasons.some(s => s.episodes.some(e => e.hasAired && !watched.has(e.id)));
 
   return (
     <div className={`page ${isAnime ? 'anime-detail' : ''}`}>
@@ -568,7 +575,7 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 ~{Math.round(totalWatched * show.runtime / 60)}h regardées · {Math.round((totalEps - totalWatched) * show.runtime / 60)}h restantes
               </div>
             )}
-            {totalWatched < totalEps && (
+            {hasUnwatchedAired && (
               <button
                 className="btn"
                 style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
@@ -576,6 +583,16 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
                 disabled={isPending}
               >
                 <Icon name="check" size={14} />Tout marquer comme vu
+              </button>
+            )}
+            {totalWatched > 0 && (
+              <button
+                className="btn"
+                style={{ width: '100%', justifyContent: 'center', marginTop: hasUnwatchedAired ? 6 : 12 }}
+                onClick={handleUnmarkAllWatched}
+                disabled={isPending}
+              >
+                <Icon name="x" size={14} />Tout marquer comme non vu
               </button>
             )}
           </div>

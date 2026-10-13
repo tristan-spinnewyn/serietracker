@@ -14,6 +14,7 @@ const {
   mockUserEpisodeDelete,
   mockUserEpisodeCount,
   mockUserEpisodeCreateMany,
+  mockUserEpisodeDeleteMany,
   mockShowFindUnique,
   mockNotificationCreate,
   mockNotificationFindFirst,
@@ -34,6 +35,7 @@ const {
   mockUserEpisodeDelete: vi.fn(),
   mockUserEpisodeCount: vi.fn(),
   mockUserEpisodeCreateMany: vi.fn(),
+  mockUserEpisodeDeleteMany: vi.fn(),
   mockShowFindUnique: vi.fn(),
   mockNotificationCreate: vi.fn(),
   mockNotificationFindFirst: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock('@/lib/db', () => ({
       delete: mockUserEpisodeDelete,
       count: mockUserEpisodeCount,
       createMany: mockUserEpisodeCreateMany,
+      deleteMany: mockUserEpisodeDeleteMany,
     },
     show: { findUnique: mockShowFindUnique },
     notification: {
@@ -82,6 +85,7 @@ import {
   markEpisodesWatchedBatch,
   markAllCompletedEpisodesWatched,
   markShowAllWatched,
+  unmarkShowAllWatched,
   toggleShowNotif,
   rateShow,
 } from '@/lib/actions/shows';
@@ -269,6 +273,69 @@ describe('shows actions', () => {
 
       await markShowAllWatched('s1');
       expect(mockUserEpisodeCreateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unmarkShowAllWatched', () => {
+    it('supprime tous les épisodes vus d\'un show et passe le statut en PLAN_TO_WATCH si COMPLETED', async () => {
+      mockEpisodeFindMany.mockResolvedValue([{ id: 'ep-1' }, { id: 'ep-2' }]);
+      mockUserEpisodeDeleteMany.mockResolvedValue({ count: 2 });
+      mockUserShowFindUnique.mockResolvedValue({ status: 'COMPLETED' });
+      mockUserShowUpdate.mockResolvedValue({});
+
+      await unmarkShowAllWatched('s1');
+
+      expect(mockEpisodeFindMany).toHaveBeenCalledWith({
+        where: { season: { showId: 's1' } },
+        select: { id: true },
+      });
+      expect(mockUserEpisodeDeleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'u1',
+          episodeId: { in: ['ep-1', 'ep-2'] },
+        },
+      });
+      expect(mockUserShowUpdate).toHaveBeenCalledWith({
+        where: { userId_showId: { userId: 'u1', showId: 's1' } },
+        data: { status: 'PLAN_TO_WATCH' },
+      });
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/show/s1');
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/dashboard');
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/termine');
+    });
+
+    it('passe le statut en PLAN_TO_WATCH si le show était WATCHING', async () => {
+      mockEpisodeFindMany.mockResolvedValue([{ id: 'ep-1' }]);
+      mockUserEpisodeDeleteMany.mockResolvedValue({ count: 1 });
+      mockUserShowFindUnique.mockResolvedValue({ status: 'WATCHING' });
+      mockUserShowUpdate.mockResolvedValue({});
+
+      await unmarkShowAllWatched('s1');
+
+      expect(mockUserShowUpdate).toHaveBeenCalledWith({
+        where: { userId_showId: { userId: 'u1', showId: 's1' } },
+        data: { status: 'PLAN_TO_WATCH' },
+      });
+    });
+
+    it('ne modifie pas le statut si le show n\'est pas COMPLETED ni WATCHING', async () => {
+      mockEpisodeFindMany.mockResolvedValue([{ id: 'ep-1' }]);
+      mockUserEpisodeDeleteMany.mockResolvedValue({ count: 1 });
+      mockUserShowFindUnique.mockResolvedValue({ status: 'DROPPED' });
+
+      await unmarkShowAllWatched('s1');
+
+      expect(mockUserShowUpdate).not.toHaveBeenCalled();
+    });
+
+    it('ne tente pas de supprimer d\'épisodes si le show n\'en a aucun', async () => {
+      mockEpisodeFindMany.mockResolvedValue([]);
+      mockUserShowFindUnique.mockResolvedValue(null);
+
+      await unmarkShowAllWatched('s1');
+
+      expect(mockUserEpisodeDeleteMany).not.toHaveBeenCalled();
+      expect(mockUserShowUpdate).not.toHaveBeenCalled();
     });
   });
 
