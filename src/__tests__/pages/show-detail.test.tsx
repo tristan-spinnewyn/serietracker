@@ -19,6 +19,7 @@ const {
   mockRemoveUserShow,
   mockRateShow,
   mockMarkShowAllWatched,
+  mockUnmarkShowAllWatched,
   mockAddShowToList,
   mockLinkShows,
 } = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ const {
   mockRemoveUserShow: vi.fn(),
   mockRateShow: vi.fn(),
   mockMarkShowAllWatched: vi.fn(),
+  mockUnmarkShowAllWatched: vi.fn(),
   mockAddShowToList: vi.fn(),
   mockLinkShows: vi.fn(),
 }));
@@ -68,6 +70,7 @@ vi.mock('@/lib/actions/shows', () => ({
   removeUserShow: mockRemoveUserShow,
   rateShow: mockRateShow,
   markShowAllWatched: mockMarkShowAllWatched,
+  unmarkShowAllWatched: mockUnmarkShowAllWatched,
 }));
 vi.mock('@/lib/actions/lists', () => ({
   addShowToList: mockAddShowToList,
@@ -307,6 +310,55 @@ describe('Show Page & ShowDetail', () => {
       await waitFor(() => {
         expect(mockMarkShowAllWatched).toHaveBeenCalledWith('s1');
       });
+    });
+
+    it('permet d\'inverser et de tout marquer comme non vu en cas de clic malencontreux', async () => {
+      mockMarkShowAllWatched.mockResolvedValue({ success: true });
+      mockUnmarkShowAllWatched.mockResolvedValue({ success: true });
+      render(<ShowDetail {...defaultProps} />);
+
+      // Le bouton inverse "Tout marquer comme non vu" est présent car un épisode est vu
+      const unmarkBtn = screen.getByRole('button', { name: /Tout marquer comme non vu/i });
+      fireEvent.click(unmarkBtn);
+
+      await waitFor(() => {
+        expect(mockUnmarkShowAllWatched).toHaveBeenCalledWith('s1');
+        expect(mockRefresh).toHaveBeenCalled();
+      });
+
+      // Maintenant que tout est démarqué, seul le bouton "Tout marquer comme vu" est affiché
+      expect(screen.getByRole('button', { name: /Tout marquer comme vu/i })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /Tout marquer comme non vu/i })).toBeNull();
+
+      // Clic sur "Tout marquer comme vu"
+      const markAllBtn = screen.getByRole('button', { name: /Tout marquer comme vu/i });
+      fireEvent.click(markAllBtn);
+
+      await waitFor(() => {
+        expect(mockMarkShowAllWatched).toHaveBeenCalledWith('s1');
+      });
+
+      // Tous les épisodes sont vus : "Tout marquer comme vu" disparaît, le bouton inverse apparaît
+      expect(screen.queryByRole('button', { name: /Tout marquer comme vu/i })).toBeNull();
+      const unmarkBtnAfter = screen.getByRole('button', { name: /Tout marquer comme non vu/i });
+      expect(unmarkBtnAfter).toBeDefined();
+    });
+
+    it('n\'affiche pas le bouton "Tout marquer comme non vu" si aucun épisode n\'est vu', () => {
+      const zeroWatchedProps = {
+        ...defaultProps,
+        seasons: [
+          {
+            ...defaultProps.seasons[0],
+            watchedCount: 0,
+            episodes: defaultProps.seasons[0].episodes.map(e => ({ ...e, watched: false })),
+          },
+        ],
+      };
+      render(<ShowDetail {...zeroWatchedProps} />);
+
+      expect(screen.getByRole('button', { name: /Tout marquer comme vu/i })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /Tout marquer comme non vu/i })).toBeNull();
     });
 
     it('permet de réimporter / synchroniser les données', async () => {

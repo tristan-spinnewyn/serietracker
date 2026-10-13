@@ -267,6 +267,43 @@ export async function markShowAllWatched(showId: string) {
   revalidatePath('/dashboard');
 }
 
+// ── Tout marquer comme non vu ───────────────────────────────────────────────
+
+export async function unmarkShowAllWatched(showId: string) {
+  const session = await getSession();
+  const userId = session.user.id;
+
+  const episodes = await db.episode.findMany({
+    where: { season: { showId } },
+    select: { id: true },
+  });
+
+  if (episodes.length > 0) {
+    await db.userEpisode.deleteMany({
+      where: {
+        userId,
+        episodeId: { in: episodes.map(e => e.id) },
+      },
+    });
+  }
+
+  const userShow = await db.userShow.findUnique({
+    where: { userId_showId: { userId, showId } },
+    select: { status: true },
+  });
+
+  if (userShow && (userShow.status === 'COMPLETED' || userShow.status === 'WATCHING')) {
+    await db.userShow.update({
+      where: { userId_showId: { userId, showId } },
+      data: { status: 'PLAN_TO_WATCH' },
+    });
+  }
+
+  revalidatePath(`/show/${showId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/termine');
+}
+
 // ── Toggle notification pour un show ────────────────────────────────────────
 
 export async function toggleShowNotif(showId: string, enabled: boolean) {
