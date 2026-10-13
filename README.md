@@ -66,7 +66,8 @@ Ouvrir [http://localhost:3000](http://localhost:3000).
 | `npm run dev` | Serveur de développement |
 | `npm run build` | Build de production |
 | `npm test` | Lancer les tests unitaires (Vitest) |
-| `npm run test:coverage` | Tests avec rapport de couverture (seuil min 80% requis) |
+| `npm run test:coverage` | Tests avec rapport de couverture globale (seuil min 80% requis) |
+| `npm run test:diff-coverage` | Vérifie la couverture du nouveau code / diff (seuil min 80% requis) |
 | `npm run db:migrate` | Appliquer les migrations Prisma |
 | `npm run db:seed <mdp>` | Créer les comptes initiaux |
 | `npm run db:clean` | Vider la base (garde les users) |
@@ -77,8 +78,8 @@ Ouvrir [http://localhost:3000](http://localhost:3000).
 ## Tests et qualité de code
 
 - Tests unitaires exécutés avec **Vitest** et **React Testing Library**.
-- Seuil minimum de couverture de **80%** (lignes, instructions, fonctions) strictement imposé dans `vitest.config.ts` et dans la CI GitHub Actions (`npm run test:coverage`).
-- Tout nouveau code ou PR faisant descendre la couverture sous les 80% fait échouer la CI et bloque le merge.
+- **Couverture globale >= 80%** : strictement imposée dans `vitest.config.ts` et vérifiée en CI (`npm run test:coverage`).
+- **Couverture du nouveau code >= 80%** : vérifiée via `npm run test:diff-coverage` en local et dans la CI GitHub Actions. Tout ajout ou modification de code sans au moins 80% de couverture fait échouer la CI et bloque le merge.
 
 ---
 

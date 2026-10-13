@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:diff-coverage": "tsx scripts/check-diff-coverage.ts",
     "test:watch": "vitest",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
