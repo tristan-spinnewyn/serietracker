@@ -9,7 +9,8 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Sur main on ne coupe jamais un run en cours (il peut contenir un déploiement).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -72,3 +73,27 @@ jobs:
       # -> valide aussi que les migrations s'appliquent sur une base vierge.
       - name: Build
         run: npm run build
+
+  deploy:
+    name: deploy
+    needs: ci
+    # Uniquement après un push sur main (merge de PR) et si la CI est verte.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Trigger Coolify deployment
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_DEPLOY_URL: ${{ secrets.COOLIFY_DEPLOY_URL }}
+        run: |
+          if [ -z "$COOLIFY_TOKEN" ] || [ -z "$COOLIFY_DEPLOY_URL" ]; then
+            echo "::error::Secrets COOLIFY_TOKEN / COOLIFY_DEPLOY_URL manquants"
+            exit 1
+          fi
+          curl --fail-with-body -sS --max-time 60 -X POST \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$COOLIFY_DEPLOY_URL"
