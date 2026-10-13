@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { stripHtml } from '@/lib/anilist/client';
 
 const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
@@ -171,7 +172,7 @@ async function fetchAiringAnime(): Promise<ReleaseItem[]> {
       genre: (m.genres as string[] ?? []).slice(0, 3).join(' · ') || null,
       score: m.averageScore ? (m.averageScore as number) / 10 : null,
       status: m.status === 'RELEASING' ? 'En cours' : 'À venir',
-      overview: (m.description as string)?.replace(/<[^>]+>/g, '') ?? null,
+      overview: stripHtml(m.description as string),
       network: null,
       tmdbId: null,
       anilistId: m.id as number,

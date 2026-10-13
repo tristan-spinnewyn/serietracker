@@ -23,6 +23,21 @@ export function getLastAnilistError(): string | null {
   return lastAnilistErrorMessage;
 }
 
+/**
+ * Nettoie le HTML d'une chaîne (ex: balises retournées par AniList).
+ * Boucle tant qu'il reste des balises pour éviter les résidus imbriqués (CodeQL).
+ */
+export function stripHtml(text: string | null | undefined): string | null {
+  if (!text) return null;
+  let clean = text;
+  let prev: string;
+  do {
+    prev = clean;
+    clean = clean.replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
+  } while (clean !== prev);
+  return clean.trim() || null;
+}
+
 function isApiDisabledError(errors: AnilistGqlError[] | undefined): boolean {
   return !!errors?.some(e =>
     typeof e.message === 'string' && /api has been temporarily disabled/i.test(e.message)
@@ -213,7 +228,7 @@ export async function searchAnilist(q: string): Promise<AnilistSearchResult[]> {
       type: 'ANIME' as const,
       year: startDate?.year ?? null,
       posterPath: coverImage?.large ?? null,
-      overview: (media.description as string)?.replace(/<[^>]+>/g, '') ?? null,
+      overview: stripHtml(media.description as string),
     };
   });
 }
@@ -292,7 +307,7 @@ export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShow
     year: startDate?.year ?? null,
     posterPath: coverImage?.extraLarge ?? null,
     backdropPath: m.bannerImage as string ?? null,
-    overview: (m.description as string)?.replace(/<[^>]+>/g, '') ?? null,
+    overview: stripHtml(m.description as string),
     status: mapAnilistStatus(m.status as string),
     network: (m.studios as { nodes: { name: string }[] })?.nodes?.[0]?.name ?? null,
     genre: (m.genres as string[] ?? []).slice(0, 3).join(' · ') || null,
