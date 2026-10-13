@@ -48,6 +48,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -66,8 +68,11 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Unit tests & coverage (>= 80%)
+      - name: Unit tests & global coverage (>= 80%)
         run: npm run test:coverage
+
+      - name: Check new code coverage (>= 80%)
+        run: npm run test:diff-coverage
 
       # `npm run build` = prisma migrate deploy + next build
       # -> valide aussi que les migrations s'appliquent sur une base vierge.
