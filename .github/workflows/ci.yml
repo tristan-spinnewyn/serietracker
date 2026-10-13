@@ -66,8 +66,8 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Unit tests
-        run: npm test
+      - name: Unit tests & coverage (>= 80%)
+        run: npm run test:coverage
 
       # `npm run build` = prisma migrate deploy + next build
       # -> valide aussi que les migrations s'appliquent sur une base vierge.
