@@ -30,11 +30,16 @@ export function getLastAnilistError(): string | null {
 export function stripHtml(text: string | null | undefined): string | null {
   if (!text) return null;
   let clean = text;
-  let prev: string;
-  do {
-    prev = clean;
-    clean = clean.replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
-  } while (clean !== prev);
+  while (clean.includes('<')) {
+    const start = clean.indexOf('<');
+    const end = clean.indexOf('>', start);
+    if (end === -1) {
+      clean = clean.slice(0, start);
+      break;
+    }
+    clean = clean.slice(0, start) + clean.slice(end + 1);
+  }
+  clean = clean.replaceAll('>', '');
   return clean.trim() || null;
 }
 
