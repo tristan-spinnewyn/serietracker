@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAnilistProviders, parseAnilistProviderLinks } from '@/lib/anilist/client';
+import { parseAnilistProviders, parseAnilistProviderLinks, stripHtml } from '@/lib/anilist/client';
 
 const link = (site: string, type = 'STREAMING', url = `https://${site.toLowerCase()}.com/anime/123`) =>
   ({ site, type, url });
@@ -79,5 +79,22 @@ describe('parseAnilistProviderLinks', () => {
 
   it('retourne {} pour un tableau vide', () => {
     expect(parseAnilistProviderLinks([])).toEqual({});
+  });
+});
+
+describe('stripHtml', () => {
+  it('nettoie les balises HTML simples', () => {
+    expect(stripHtml('Un résumé <b>avec du gras</b> et <br>des retours.')).toBe('Un résumé avec du gras et des retours.');
+  });
+
+  it('nettoie les balises imbriquées récursives', () => {
+    expect(stripHtml('<script<script>>alert(1)</script>')).toBe('alert(1)');
+  });
+
+  it('gère null, undefined et les chaînes vides', () => {
+    expect(stripHtml(null)).toBeNull();
+    expect(stripHtml(undefined)).toBeNull();
+    expect(stripHtml('')).toBeNull();
+    expect(stripHtml('   <br/>  ')).toBeNull();
   });
 });

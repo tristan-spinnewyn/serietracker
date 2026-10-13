@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
-import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks, buildAnilistEpisodes } from '@/lib/anilist/client';
+import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks, buildAnilistEpisodes, stripHtml } from '@/lib/anilist/client';
 import type { Show, ShowStatus, NotifType, RelationType } from '@prisma/client';
 
 const RELATION_MAP: Record<string, RelationType> = {
@@ -369,7 +369,7 @@ async function applyAnilistData(showId: string, payload: AnilistPayload): Promis
     data: {
       title: payload.title.english ?? payload.title.romaji ?? undefined,
       status: newStatus,
-      overview: payload.description?.replace(/<[^>]+>/g, '') ?? null,
+      overview: stripHtml(payload.description),
       posterPath: payload.coverImage?.extraLarge ?? null,
       backdropPath: payload.bannerImage ?? null,
       ...(providers !== undefined ? { providers } : {}),
