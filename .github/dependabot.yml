@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # typescript-eslint (via eslint-config-next) ne supporte actuellement que TS < 6.1.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
+      # eslint-config-next@16.4.0 (et ses plugins pairs) exige eslint ^8 ou ^9.
+      - dependency-name: eslint
+        versions: [">=10.0.0"]
     groups:
       # Regroupe les patch/minor en une seule PR pour limiter le bruit
       minor-and-patch:
