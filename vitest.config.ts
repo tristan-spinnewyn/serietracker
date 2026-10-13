@@ -5,6 +5,21 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'json-summary'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/__tests__/**',
+        'src/types/**',
+        'src/**/*.d.ts',
+      ],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+      },
+    },
   },
   resolve: {
     alias: {
