@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    # Ce nom est le "status check" requis par la protection de branche : ne pas le renommer
+    # sans mettre à jour la règle de protection.
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: seriestracker
+          POSTGRES_USER: serie
+          POSTGRES_PASSWORD: serie_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U serie -d seriestracker"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Valeurs factices, uniquement pour la CI
+      DATABASE_URL: postgresql://serie:serie_ci@localhost:5432/seriestracker
+      AUTH_SECRET: ci-dummy-secret-not-used-in-production
+      AUTH_URL: http://localhost:3000
+      CRON_SECRET: ci-dummy-cron-secret
+      NEXT_TELEMETRY_DISABLED: 1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # TODO: retirer `continue-on-error` une fois les erreurs ESLint existantes corrigées
+      # (10 erreurs sur main au moment de la mise en place de la CI).
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      # `npm run build` = prisma migrate deploy + next build
+      # -> valide aussi que les migrations s'appliquent sur une base vierge.
+      - name: Build
+        run: npm run build
