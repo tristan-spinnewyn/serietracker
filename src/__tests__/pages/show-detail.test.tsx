@@ -310,10 +310,13 @@ describe('Show Page & ShowDetail', () => {
       await waitFor(() => {
         expect(mockMarkShowAllWatched).toHaveBeenCalledWith('s1');
       });
+
+      // Après avoir tout marqué comme vu, le bouton inverse prend le relais
+      expect(screen.queryByRole('button', { name: /Tout marquer comme vu/i })).toBeNull();
+      expect(screen.getByRole('button', { name: /Tout marquer comme non vu/i })).toBeDefined();
     });
 
-    it('permet d\'inverser et de tout marquer comme non vu en cas de clic malencontreux', async () => {
-      mockMarkShowAllWatched.mockResolvedValue({ success: true });
+    it('permet de tout marquer comme non vu via le bouton inverse', async () => {
       mockUnmarkShowAllWatched.mockResolvedValue({ success: true });
       render(<ShowDetail {...defaultProps} />);
 
@@ -326,22 +329,26 @@ describe('Show Page & ShowDetail', () => {
         expect(mockRefresh).toHaveBeenCalled();
       });
 
-      // Maintenant que tout est démarqué, seul le bouton "Tout marquer comme vu" est affiché
+      // Après avoir tout démarqué, "Tout marquer comme non vu" disparaît et "Tout marquer comme vu" réapparaît
       expect(screen.getByRole('button', { name: /Tout marquer comme vu/i })).toBeDefined();
       expect(screen.queryByRole('button', { name: /Tout marquer comme non vu/i })).toBeNull();
+    });
 
-      // Clic sur "Tout marquer comme vu"
-      const markAllBtn = screen.getByRole('button', { name: /Tout marquer comme vu/i });
-      fireEvent.click(markAllBtn);
+    it('affiche uniquement le bouton inverse lorsque tous les épisodes sont vus', () => {
+      const allWatchedProps = {
+        ...defaultProps,
+        seasons: [
+          {
+            ...defaultProps.seasons[0],
+            watchedCount: 2,
+            episodes: defaultProps.seasons[0].episodes.map(e => ({ ...e, watched: true })),
+          },
+        ],
+      };
+      render(<ShowDetail {...allWatchedProps} />);
 
-      await waitFor(() => {
-        expect(mockMarkShowAllWatched).toHaveBeenCalledWith('s1');
-      });
-
-      // Tous les épisodes sont vus : "Tout marquer comme vu" disparaît, le bouton inverse apparaît
+      expect(screen.getByRole('button', { name: /Tout marquer comme non vu/i })).toBeDefined();
       expect(screen.queryByRole('button', { name: /Tout marquer comme vu/i })).toBeNull();
-      const unmarkBtnAfter = screen.getByRole('button', { name: /Tout marquer comme non vu/i });
-      expect(unmarkBtnAfter).toBeDefined();
     });
 
     it('n\'affiche pas le bouton "Tout marquer comme non vu" si aucun épisode n\'est vu', () => {
