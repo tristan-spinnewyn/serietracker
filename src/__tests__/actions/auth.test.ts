@@ -115,6 +115,32 @@ describe('registerAction', () => {
     });
   });
 
+  it('refuses a case variant of an email that already has an account', async () => {
+    process.env.ALLOW_REGISTRATION = 'false';
+    process.env.ALLOWED_EMAILS = 'spouse@test.com';
+    // The real account was registered in lowercase
+    mockFindUnique.mockImplementation(async ({ where }: { where: { email: string } }) =>
+      where.email === 'spouse@test.com' ? { id: 'spouse' } : null);
+
+    const res = await registerAction({ name: 'Intruder', email: ' SPOUSE@Test.com ', password: 'securePassword1' });
+
+    expect(res).toEqual({ error: 'Un compte existe déjà avec cet email.' });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores the email trimmed and lowercased', async () => {
+    mockFindUnique.mockResolvedValue(null);
+    mockHash.mockResolvedValue('hashed_pw');
+    mockCreate.mockResolvedValue({ id: 'new-user' });
+
+    await registerAction({ name: 'Jean', email: '  Jean.Paul@Example.COM ', password: 'securePassword1' });
+
+    expect(mockFindUnique).toHaveBeenCalledWith({ where: { email: 'jean.paul@example.com' } });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ email: 'jean.paul@example.com' }),
+    });
+  });
+
   it('blocks a 6th registration attempt from the same IP within an hour', async () => {
     mockFindUnique.mockResolvedValue(null);
     mockHash.mockResolvedValue('hashed_pw');
