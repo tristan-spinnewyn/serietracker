@@ -1,8 +1,8 @@
 import type { ShowStatus } from '@prisma/client';
 
-const BASE = 'https://api.themoviedb.org/3';
+export const TMDB_BASE = 'https://api.themoviedb.org/3';
 
-function headers() {
+export function tmdbHeaders() {
   return { Authorization: `Bearer ${process.env.TMDB_READ_ACCESS_TOKEN}` };
 }
 
@@ -42,15 +42,24 @@ const TMDB_PROVIDER_MAP: Record<number, string> = {
   430:  'hidive',
 };
 
-async function fetchProviders(tmdbId: number): Promise<{ providers: string[]; providerLinks: Record<string, string> }> {
+export interface TmdbProviders {
+  providers: string[];
+  providerLinks: Record<string, string>;
+}
+
+/**
+ * French streaming availability of a show. Returns null when TMDB has no data
+ * or cannot be reached, so a re-sync can keep the providers it already has.
+ */
+export async function fetchTmdbProviders(tmdbId: number): Promise<TmdbProviders | null> {
   const res = await fetch(
-    `${BASE}/tv/${tmdbId}/watch/providers`,
-    { headers: headers() },
-  );
-  if (!res.ok) return { providers: [], providerLinks: {} };
+    `${TMDB_BASE}/tv/${tmdbId}/watch/providers`,
+    { headers: tmdbHeaders() },
+  ).catch(() => null);
+  if (!res?.ok) return null;
   const data = await res.json();
   const fr = data.results?.FR;
-  if (!fr) return { providers: [], providerLinks: {} };
+  if (!fr) return null;
 
   const all: { provider_id: number }[] = [
     ...(fr.flatrate ?? []),
@@ -89,8 +98,8 @@ export async function searchTmdb(q: string): Promise<TmdbSearchResult[]> {
   if (!process.env.TMDB_READ_ACCESS_TOKEN) return [];
 
   const res = await fetch(
-    `${BASE}/search/tv?query=${encodeURIComponent(q)}&language=fr-FR&page=1`,
-    { headers: headers() }
+    `${TMDB_BASE}/search/tv?query=${encodeURIComponent(q)}&language=fr-FR&page=1`,
+    { headers: tmdbHeaders() }
   );
   if (!res.ok) return [];
 
@@ -110,8 +119,8 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
   if (!process.env.TMDB_READ_ACCESS_TOKEN) return null;
 
   const res = await fetch(
-    `${BASE}/tv/${tmdbId}?language=fr-FR`,
-    { headers: headers() }
+    `${TMDB_BASE}/tv/${tmdbId}?language=fr-FR`,
+    { headers: tmdbHeaders() }
   );
   if (!res.ok) return null;
 
@@ -122,8 +131,8 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
     if (s.season_number === 0) continue;
 
     const sRes = await fetch(
-      `${BASE}/tv/${tmdbId}/season/${s.season_number}?language=fr-FR`,
-      { headers: headers() }
+      `${TMDB_BASE}/tv/${tmdbId}/season/${s.season_number}?language=fr-FR`,
+      { headers: tmdbHeaders() }
     );
     const sData = sRes.ok ? await sRes.json() : { episodes: [] };
 
@@ -146,7 +155,7 @@ export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | 
   const genre = (d.genres ?? []).map((g: { name: string }) => g.name).join(' · ') || null;
   const network = d.networks?.[0]?.name ?? null;
   const runtime = d.episode_run_time?.[0] ?? null;
-  const { providers, providerLinks } = await fetchProviders(tmdbId);
+  const { providers, providerLinks } = (await fetchTmdbProviders(tmdbId)) ?? { providers: [], providerLinks: {} };
 
   return {
     tmdbId,

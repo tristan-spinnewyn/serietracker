@@ -3,17 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { RelationType } from '@prisma/client';
-import { auth } from '@/lib/auth';
+import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
 import { idSchema, idListSchema } from '@/lib/validation';
+import { inverseRelationType } from '@/lib/shows/relations';
 
 const MAX_LIST_ITEMS = 1000;
-
-async function getSession() {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error('Non authentifié');
-  return session;
-}
 
 // ── Créer une liste ──────────────────────────────────────────────────────────
 
@@ -24,7 +19,7 @@ const createSchema = z.object({
 });
 
 export async function createList(data: { name: string; emoji?: string; color?: string }) {
-  const session = await getSession();
+  const session = await requireSession();
   const { name, emoji, color } = createSchema.parse(data);
 
   const list = await db.sharedList.create({
@@ -44,7 +39,7 @@ export async function createList(data: { name: string; emoji?: string; color?: s
 // ── Ajouter un show à une liste ──────────────────────────────────────────────
 
 export async function addShowToList(listId: string, showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
 
   // Vérifier que l'user est membre
   const member = await db.listMember.findUnique({
@@ -66,7 +61,7 @@ export async function addShowToList(listId: string, showId: string) {
 // ── Retirer un show d'une liste ──────────────────────────────────────────────
 
 export async function removeShowFromList(listId: string, showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
 
   const member = await db.listMember.findUnique({
     where: { listId_userId: { listId, userId: session.user.id } },
@@ -87,13 +82,10 @@ const linkSchema = z
   .refine(({ fromId, toId }) => fromId !== toId, { message: 'A show cannot be linked to itself' });
 
 export async function linkShows(rawFromId: string, rawToId: string, rawType: RelationType) {
-  await getSession();
+  await requireSession();
   const { fromId, toId, type } = linkSchema.parse({ fromId: rawFromId, toId: rawToId, type: rawType });
 
-  const inverseMap: Record<string, RelationType> = {
-    SEQUEL: 'PREQUEL', PREQUEL: 'SEQUEL', PARENT: 'SPINOFF',
-    SPINOFF: 'PARENT', ALTERNATIVE: 'ALTERNATIVE', RELATED: 'RELATED',
-  };
+  const inverse = inverseRelationType(type);
 
   await db.$transaction([
     db.showRelation.upsert({
@@ -103,8 +95,8 @@ export async function linkShows(rawFromId: string, rawToId: string, rawType: Rel
     }),
     db.showRelation.upsert({
       where: { fromShowId_toShowId: { fromShowId: toId, toShowId: fromId } },
-      update: { type: inverseMap[type] ?? 'RELATED' },
-      create: { fromShowId: toId, toShowId: fromId, type: inverseMap[type] ?? 'RELATED' },
+      update: { type: inverse },
+      create: { fromShowId: toId, toShowId: fromId, type: inverse },
     }),
   ]);
 
@@ -114,7 +106,7 @@ export async function linkShows(rawFromId: string, rawToId: string, rawType: Rel
 // ── Partager une liste avec un utilisateur ───────────────────────────────────
 
 export async function addMemberToList(listId: string, email: string) {
-  const session = await getSession();
+  const session = await requireSession();
 
   // Vérifier que l'invitant est membre
   const isMember = await db.listMember.findUnique({
@@ -141,7 +133,7 @@ export async function addMemberToList(listId: string, email: string) {
 // ── Réordonner les items d'une liste ────────────────────────────────────────
 
 export async function reorderList(listId: string, rawShowIds: string[]) {
-  const session = await getSession();
+  const session = await requireSession();
   const orderedShowIds = idListSchema(MAX_LIST_ITEMS).parse(rawShowIds);
 
   const member = await db.listMember.findUnique({

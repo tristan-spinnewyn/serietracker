@@ -1,23 +1,10 @@
 import { db } from '@/lib/db';
-import { sendPushToUser } from '@/lib/notifications/push';
-import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks, buildAnilistEpisodes, stripHtml } from '@/lib/anilist/client';
-import type { Show, ShowStatus, NotifType, RelationType } from '@prisma/client';
+import { notifyUsers, type NotificationPayload } from '@/lib/notifications/notify';
+import { batchFetchAnilistData, parseAnilistProviders, parseAnilistProviderLinks, buildAnilistEpisodes, stripHtml, mapAnilistStatus } from '@/lib/anilist/client';
+import { TMDB_BASE, tmdbHeaders, mapTmdbStatus, fetchTmdbProviders } from '@/lib/tmdb/client';
+import { ANILIST_RELATION_MAP, inverseRelationType } from '@/lib/shows/relations';
+import type { Show, ShowStatus } from '@prisma/client';
 
-const RELATION_MAP: Record<string, RelationType> = {
-  SEQUEL:      'SEQUEL',
-  PREQUEL:     'PREQUEL',
-  SIDE_STORY:  'SPINOFF',
-  ALTERNATIVE: 'ALTERNATIVE',
-  PARENT:      'PARENT',
-  OTHER:       'RELATED',
-};
-
-function inverseRelationType(t: RelationType): RelationType {
-  if (t === 'SEQUEL')  return 'PREQUEL';
-  if (t === 'PREQUEL') return 'SEQUEL';
-  if (t === 'PARENT')  return 'SPINOFF';
-  return t;
-}
 
 async function syncRelations(
   showId: string,
@@ -34,7 +21,7 @@ async function syncRelations(
     });
     if (!relShow) continue; // pas encore importé → skip
 
-    const relType = RELATION_MAP[edge.relationType] ?? 'RELATED';
+    const relType = ANILIST_RELATION_MAP[edge.relationType] ?? 'RELATED';
 
     await db.showRelation.upsert({
       where: { fromShowId_toShowId: { fromShowId: showId, toShowId: relShow.id } },
@@ -64,14 +51,6 @@ export function nextSyncMs(status: ShowStatus): number {
 
 // ── Notifications de changement ───────────────────────────────────────────────
 
-type NotifPayload = {
-  userId: string;
-  type: NotifType;
-  title: string;
-  body: string;
-  showId: string;
-};
-
 async function notifyChanges(
   showId: string,
   showTitle: string,
@@ -86,7 +65,7 @@ async function notifyChanges(
   });
   if (!subscribers.length) return;
 
-  const notifs: NotifPayload[] = [];
+  const notifs: NotificationPayload[] = [];
 
   if (newTotalSeasons > prevTotalSeasons) {
     const diff = newTotalSeasons - prevTotalSeasons;
@@ -116,34 +95,10 @@ async function notifyChanges(
     }
   }
 
-  if (!notifs.length) return;
-
-  await db.notification.createMany({ data: notifs });
-
-  const userIds = [...new Set(notifs.map(n => n.userId))];
-  await Promise.allSettled(
-    userIds.map(userId => {
-      const n = notifs.find(n => n.userId === userId)!;
-      return sendPushToUser(userId, { title: n.title, body: n.body });
-    }),
-  );
+  await notifyUsers(notifs);
 }
 
 // ── TMDB ──────────────────────────────────────────────────────────────────────
-
-const TMDB_BASE = 'https://api.themoviedb.org/3';
-const tmdbHeaders = () => ({ Authorization: `Bearer ${process.env.TMDB_READ_ACCESS_TOKEN}` });
-
-function mapTmdbStatus(s: string): ShowStatus {
-  const m: Record<string, ShowStatus> = {
-    'Returning Series': 'RETURNING',
-    'Ended': 'ENDED',
-    'Canceled': 'CANCELED',
-    'In Production': 'IN_PRODUCTION',
-    'Planned': 'UPCOMING',
-  };
-  return m[s] ?? 'RETURNING';
-}
 
 async function syncFromTmdb(
   showId: string,
@@ -159,26 +114,8 @@ async function syncFromTmdb(
   const newStatus = mapTmdbStatus(data.status);
   const newTotalSeasons: number = data.number_of_seasons ?? 0;
 
-  // Fetch providers + lien JustWatch (appel séparé)
-  const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-  const provRes = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}/watch/providers`, { headers: tmdbHeaders() }).catch(() => null);
-  let providerUpdate: { providers?: string[]; providerLinks?: Record<string, string> } = {};
-  if (provRes?.ok) {
-    const provData = await provRes.json();
-    const fr = provData.results?.FR;
-    if (fr) {
-      const TMDB_PROVIDER_MAP: Record<number, string> = {
-        8: 'netflix', 119: 'prime', 337: 'disney', 350: 'appletv',
-        63: 'canal', 283: 'crunchyroll', 1899: 'max', 493: 'arte', 2237: 'tf1', 430: 'hidive',
-      };
-      const all: { provider_id: number }[] = [...(fr.flatrate ?? []), ...(fr.free ?? [])];
-      const providers = [...new Set(all.map(p => TMDB_PROVIDER_MAP[p.provider_id]).filter(Boolean) as string[])];
-      const justWatchUrl: string | null = fr.link ?? null;
-      const providerLinks: Record<string, string> = {};
-      if (justWatchUrl) providers.forEach(k => { providerLinks[k] = justWatchUrl; });
-      providerUpdate = { providers, providerLinks };
-    }
-  }
+  // Keeps the current providers when TMDB has no French data
+  const providerUpdate = (await fetchTmdbProviders(tmdbId)) ?? {};
 
   await db.show.update({
     where: { id: showId },
@@ -247,16 +184,6 @@ async function syncFromTmdb(
 }
 
 // ── AniList ───────────────────────────────────────────────────────────────────
-
-function mapAnilistStatus(s: string): ShowStatus {
-  const m: Record<string, ShowStatus> = {
-    FINISHED: 'ENDED',
-    RELEASING: 'RETURNING',
-    NOT_YET_RELEASED: 'UPCOMING',
-    CANCELLED: 'CANCELED',
-  };
-  return m[s] ?? 'RETURNING';
-}
 
 interface AnilistPayload {
   status: string;
@@ -331,12 +258,9 @@ async function checkAndNotifySequels(
             const body = sequel.status === 'RELEASING'
               ? `Suite en cours de diffusion : ${sequel.title}`
               : `Suite annoncée : ${sequel.title}`;
-            const notifs = subscribers.map(({ userId }) => ({
-              userId, type: 'SHOW_RETURNING' as NotifType, title: showTitle, body, showId,
-            }));
-            await db.notification.createMany({ data: notifs });
-            const userIds = [...new Set(notifs.map(n => n.userId))];
-            await Promise.allSettled(userIds.map(uid => sendPushToUser(uid, { title: showTitle, body })));
+            await notifyUsers(subscribers.map(({ userId }) => ({
+              userId, type: 'SHOW_RETURNING' as const, title: showTitle, body, showId,
+            })));
             notifSent = true;
           }
         }

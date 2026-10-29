@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { auth } from '@/lib/auth';
+import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
 import { idListSchema } from '@/lib/validation';
 import { consumeRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -90,12 +90,6 @@ async function checkSeasonComplete(userId: string, episodeIds: string[]) {
   }
 }
 
-async function getSession() {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error('Non authentifié');
-  return session;
-}
-
 // ── Ajouter / modifier le statut d'un show ──────────────────────────────────
 
 const upsertSchema = z.object({
@@ -104,7 +98,7 @@ const upsertSchema = z.object({
 });
 
 export async function upsertUserShow(data: { showId: string; status: WatchStatus }) {
-  const session = await getSession();
+  const session = await requireSession();
   const { showId, status } = upsertSchema.parse(data);
 
   await db.userShow.upsert({
@@ -120,7 +114,7 @@ export async function upsertUserShow(data: { showId: string; status: WatchStatus
 // ── Supprimer un show de sa liste ────────────────────────────────────────────
 
 export async function removeUserShow(showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
 
   await db.userShow.delete({
     where: { userId_showId: { userId: session.user.id, showId } },
@@ -133,7 +127,7 @@ export async function removeUserShow(showId: string) {
 // ── Marquer / démarquer un épisode ───────────────────────────────────────────
 
 export async function toggleEpisode(episodeId: string, watched: boolean) {
-  const session = await getSession();
+  const session = await requireSession();
 
   if (watched) {
     // Auto-ajoute le show en WATCHING s'il n'est pas encore dans la liste
@@ -168,7 +162,7 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
 // ── Réimporter manuellement un show ─────────────────────────────────────────
 
 export async function resyncShow(showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
   if (!consumeRateLimit(`resync:${session.user.id}`, RATE_LIMITS.resyncPerUser).allowed) {
     throw new Error('Trop de synchronisations, réessaie dans une minute.');
   }
@@ -183,7 +177,7 @@ export async function resyncShow(showId: string) {
 const MAX_BATCH_EPISODES = 5000;
 
 export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
-  const session = await getSession();
+  const session = await requireSession();
   const episodeIds = idListSchema(MAX_BATCH_EPISODES).parse(rawEpisodeIds);
   if (!episodeIds.length) return;
 
@@ -205,7 +199,7 @@ export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
 // ── Marquer tous les épisodes des shows terminés comme vus ──────────────────
 
 export async function markAllCompletedEpisodesWatched(): Promise<{ count: number }> {
-  const session = await getSession();
+  const session = await requireSession();
   const userId = session.user.id;
 
   const completedShowIds = (
@@ -235,7 +229,7 @@ export async function markAllCompletedEpisodesWatched(): Promise<{ count: number
 // ── Tout marquer comme vu et passer en Terminé ──────────────────────────────
 
 export async function markShowAllWatched(showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
   const userId = session.user.id;
 
   await db.userShow.upsert({
@@ -279,7 +273,7 @@ export async function markShowAllWatched(showId: string) {
 // ── Tout marquer comme non vu ───────────────────────────────────────────────
 
 export async function unmarkShowAllWatched(showId: string) {
-  const session = await getSession();
+  const session = await requireSession();
   const userId = session.user.id;
 
   const episodes = await db.episode.findMany({
@@ -316,7 +310,7 @@ export async function unmarkShowAllWatched(showId: string) {
 // ── Toggle notification pour un show ────────────────────────────────────────
 
 export async function toggleShowNotif(showId: string, enabled: boolean) {
-  const session = await getSession();
+  const session = await requireSession();
 
   await db.userShow.update({
     where: { userId_showId: { userId: session.user.id, showId } },
@@ -329,7 +323,7 @@ export async function toggleShowNotif(showId: string, enabled: boolean) {
 // ── Noter un show ────────────────────────────────────────────────────────────
 
 export async function rateShow(showId: string, rating: number) {
-  const session = await getSession();
+  const session = await requireSession();
 
   const r = Math.min(5, Math.max(0, Math.round(rating * 2) / 2));
 

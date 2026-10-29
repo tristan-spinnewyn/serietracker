@@ -45,7 +45,9 @@ vi.mock('@/lib/notifications/push', () => ({
 }));
 
 const mockBatchFetchAnilistData = vi.fn();
-vi.mock('@/lib/anilist/client', () => ({
+vi.mock('@/lib/anilist/client', async (importOriginal) => ({
+  // Pure mapper: keep the real implementation
+  mapAnilistStatus: (await importOriginal<typeof import('@/lib/anilist/client')>()).mapAnilistStatus,
   batchFetchAnilistData: (...args: unknown[]) => mockBatchFetchAnilistData(...args),
   parseAnilistProviders: vi.fn().mockReturnValue(['crunchyroll']),
   parseAnilistProviderLinks: vi.fn().mockReturnValue({ crunchyroll: 'https://cr' }),
