@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { idListSchema } from '@/lib/validation';
 import type { WatchStatus } from '@prisma/client';
 
 // Auto-passe le show en COMPLETED quand tous les épisodes sont vus (show terminé/annulé)
@@ -174,8 +175,12 @@ export async function resyncShow(showId: string) {
 
 // ── Marquer plusieurs épisodes comme vus ─────────────────────────────────────
 
-export async function markEpisodesWatchedBatch(episodeIds: string[]) {
+// Long-running anime can exceed a thousand episodes
+const MAX_BATCH_EPISODES = 5000;
+
+export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
   const session = await getSession();
+  const episodeIds = idListSchema(MAX_BATCH_EPISODES).parse(rawEpisodeIds);
   if (!episodeIds.length) return;
 
   await db.$transaction(

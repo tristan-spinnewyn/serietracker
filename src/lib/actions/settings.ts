@@ -5,6 +5,7 @@ import { compare, hash } from 'bcryptjs';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { PROVIDERS } from '@/lib/constants';
 
 async function userId() {
   const session = await auth();
@@ -50,8 +51,13 @@ export async function updatePassword(data: { current: string; next: string }) {
 
 // ── Plateformes ───────────────────────────────────────────────────────────
 
-export async function updatePlatforms(platforms: string[]) {
+const platformsSchema = z
+  .array(z.string().refine(p => Object.hasOwn(PROVIDERS, p), { message: 'Unknown platform' }))
+  .transform(list => [...new Set(list)]);
+
+export async function updatePlatforms(rawPlatforms: string[]) {
   const id = await userId();
+  const platforms = platformsSchema.parse(rawPlatforms);
   await db.user.update({ where: { id }, data: { platforms } });
   revalidatePath('/', 'layout');
   return { success: true };

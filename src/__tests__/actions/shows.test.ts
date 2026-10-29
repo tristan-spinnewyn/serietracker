@@ -213,6 +213,16 @@ describe('shows actions', () => {
       expect(mockTransaction).toHaveBeenCalled();
       expect(mockRevalidatePath).toHaveBeenCalledWith('/show/[id]', 'page');
     });
+
+    it.each([
+      ['a non-array payload', 'ep-1'],
+      ['non-string ids', [{ id: 'ep-1' }]],
+      ['an oversized array', Array.from({ length: 5001 }, (_, i) => `ep-${i}`)],
+    ])('rejects %s', async (_label, ids) => {
+      // @ts-expect-error -- server actions receive untrusted input at runtime
+      await expect(markEpisodesWatchedBatch(ids)).rejects.toThrow();
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('markAllCompletedEpisodesWatched', () => {

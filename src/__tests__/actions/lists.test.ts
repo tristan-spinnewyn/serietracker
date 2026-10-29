@@ -126,6 +126,17 @@ describe('lists actions', () => {
       expect(res).toEqual({ success: true });
       expect(mockTransaction).toHaveBeenCalled();
     });
+
+    it.each([
+      ['an unknown relation type', 'showA', 'showB', 'HACKED'],
+      ['a show linked to itself', 'showA', 'showA', 'SEQUEL'],
+      ['a non-string id', { id: 'x' }, 'showB', 'SEQUEL'],
+      ['an empty id', '', 'showB', 'SEQUEL'],
+    ])('rejects %s', async (_label, fromId, toId, type) => {
+      // @ts-expect-error -- server actions receive untrusted input at runtime
+      await expect(linkShows(fromId, toId, type)).rejects.toThrow();
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('addMemberToList', () => {
@@ -180,6 +191,17 @@ describe('lists actions', () => {
       await reorderList('list-1', ['show-2', 'show-1']);
       expect(mockTransaction).toHaveBeenCalled();
       expect(mockRevalidatePath).toHaveBeenCalledWith('/lists');
+    });
+
+    it.each([
+      ['a non-array payload', 'show-1'],
+      ['non-string ids', [1, 2]],
+      ['an oversized array', Array.from({ length: 1001 }, (_, i) => `show-${i}`)],
+    ])('rejects %s', async (_label, ids) => {
+      mockListMemberFindUnique.mockResolvedValue({ id: 'mem-1' });
+      // @ts-expect-error -- server actions receive untrusted input at runtime
+      await expect(reorderList('list-1', ids)).rejects.toThrow();
+      expect(mockTransaction).not.toHaveBeenCalled();
     });
   });
 });
