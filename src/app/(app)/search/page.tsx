@@ -22,7 +22,7 @@ interface RemoteResult {
 
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
 
-function RemoteCard({ result, onImport }: { result: RemoteResult; onImport: (r: RemoteResult) => void }) {
+function RemoteCard({ result, onImport }: { result: RemoteResult; onImport: (r: RemoteResult) => Promise<boolean> }) {
   const [loading, setLoading] = useState(false);
   const imgUrl = result.posterPath
     ? result.tmdbId
@@ -32,7 +32,11 @@ function RemoteCard({ result, onImport }: { result: RemoteResult; onImport: (r: 
 
   return (
     <button
-      onClick={() => { setLoading(true); onImport(result); }}
+      onClick={async () => {
+        setLoading(true);
+        // On success the page navigates away; on failure the card must be usable again
+        if (!(await onImport(result))) setLoading(false);
+      }}
       disabled={loading}
       style={{ display: 'block', background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
     >
@@ -103,6 +107,7 @@ export default function SearchPage() {
   const [remoteResults, setRemoteResults] = useState<RemoteResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // Queries shorter than 2 characters show nothing, whatever the last results were
@@ -138,20 +143,25 @@ export default function SearchPage() {
     return () => { active = false; clearTimeout(timer); };
   }, [q, hasQuery, filt, onlyMyPlatforms]);
 
-  const handleImport = (result: RemoteResult) => {
-    startTransition(async () => {
-      const payload = result.tmdbId
-        ? { tmdbId: result.tmdbId }
-        : { anilistId: result.anilistId };
+  const handleImport = async (result: RemoteResult): Promise<boolean> => {
+    setImportError(null);
+    const payload = result.tmdbId
+      ? { tmdbId: result.tmdbId }
+      : { anilistId: result.anilistId };
 
-      const res = await fetch('/api/shows/import', {
+    try {
+      const data = await apiFetch<{ id: string }>('/api/shows/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (data.id) router.push(`/show/${data.id}`);
-    });
+      startTransition(() => router.push(`/show/${data.id}`));
+      return true;
+    } catch (e) {
+      // apiFetch surfaces the API's own message (rate limit, upstream failure…)
+      setImportError(e instanceof Error ? e.message : 'Import impossible.');
+      return false;
+    }
   };
 
   const hasResults = local.length > 0 || remote.length > 0;
@@ -228,6 +238,14 @@ export default function SearchPage() {
             </h2>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Clic → import + sync</span>
           </div>
+          {importError && (
+            <div role="alert" style={{
+              marginBottom: 12, padding: '8px 14px', borderRadius: 8, fontSize: 13,
+              background: 'rgba(251,113,133,0.12)', border: '1px solid rgba(251,113,133,0.25)', color: '#FECACA',
+            }}>
+              ✕ {importError}
+            </div>
+          )}
           <div className="poster-grid">
             {remote.map((r, i) => (
               <RemoteCard key={r.tmdbId ?? r.anilistId ?? i} result={r} onImport={handleImport} />
