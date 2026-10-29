@@ -69,7 +69,7 @@ describe('syncFromAnilist', () => {
     mockImportShowFromAnilist.mockImplementation(async (id: number) => ({ id: `show-${id}` }));
 
     // Show 1 est déjà présent avec priorité inférieure (PLAN_TO_WATCH) -> doit être mis à jour
-    mockFindUnique.mockImplementation(async ({ where }: any) => {
+    mockFindUnique.mockImplementation(async ({ where }: { where: { userId_showId: { showId: string } } }) => {
       if (where.userId_showId.showId === 'show-101') {
         return { status: 'PLAN_TO_WATCH' };
       }

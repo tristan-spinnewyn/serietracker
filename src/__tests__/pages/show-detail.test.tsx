@@ -5,7 +5,6 @@ import React from 'react';
 
 const {
   mockAuth,
-  mockNotFound,
   mockShowFindUnique,
   mockUserEpisodeFindMany,
   mockPush,
@@ -24,7 +23,6 @@ const {
   mockLinkShows,
 } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
-  mockNotFound: vi.fn(),
   mockShowFindUnique: vi.fn(),
   mockUserEpisodeFindMany: vi.fn(),
   mockPush: vi.fn(),
@@ -46,9 +44,7 @@ const {
 vi.mock('@/lib/auth', () => ({ auth: mockAuth }));
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => {
-    const err = new Error('NEXT_NOT_FOUND');
-    (err as any).digest = 'NEXT_NOT_FOUND';
-    throw err;
+    throw Object.assign(new Error('NEXT_NOT_FOUND'), { digest: 'NEXT_NOT_FOUND' });
   }),
   useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
 }));

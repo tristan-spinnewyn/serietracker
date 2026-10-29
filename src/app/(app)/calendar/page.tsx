@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { paletteFor } from '@/lib/constants';
-import { apiFetch } from '@/lib/fetch';
+import { useApiQuery } from '@/hooks/use-api-query';
 import { toggleShowNotif } from '@/lib/actions/shows';
 
 interface CalEpisode {
@@ -42,30 +42,23 @@ export default function CalendarPage() {
   const [filter, setFilter] = useState<'all' | 'SERIES' | 'ANIME'>('all');
   const [scope, setScope] = useState<'me' | 'all'>('me');
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [episodes, setEpisodes] = useState<CalEpisode[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notifyMap, setNotifyMap] = useState<Record<string, boolean>>({});
+  // Toggles made on this page, applied on top of the values loaded from the API
+  const [notifyOverrides, setNotifyOverrides] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({ year: String(year), month: String(month + 1), scope });
-    apiFetch<{ episodes: CalEpisode[] }>(`/api/calendar?${params}`)
-      .then(d => {
-        const eps = d.episodes ?? [];
-        setEpisodes(eps);
-        const map: Record<string, boolean> = {};
-        eps.forEach(e => { map[e.showId] = e.notifyEnabled; });
-        setNotifyMap(map);
-      })
-      .catch(() => setError('Impossible de charger le calendrier.'))
-      .finally(() => setLoading(false));
-  }, [year, month, scope]);
+  const params = new URLSearchParams({ year: String(year), month: String(month + 1), scope });
+  const query = useApiQuery<{ episodes: CalEpisode[] }>(`/api/calendar?${params}`);
+  const episodes = query.data?.episodes ?? [];
+  const loading = query.loading;
+  const error = query.error ? 'Impossible de charger le calendrier.' : null;
+
+  const notifyMap: Record<string, boolean> = {
+    ...Object.fromEntries(episodes.map(e => [e.showId, e.notifyEnabled])),
+    ...notifyOverrides,
+  };
 
   const handleToggleNotify = (showId: string) => {
     const next = !(notifyMap[showId] ?? true);
-    setNotifyMap(prev => ({ ...prev, [showId]: next }));
+    setNotifyOverrides(prev => ({ ...prev, [showId]: next }));
     toggleShowNotif(showId, next);
   };
 

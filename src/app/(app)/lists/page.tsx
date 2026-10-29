@@ -14,6 +14,14 @@ import { SortableListItem } from './sortable-list-item';
 import { NewListModal } from './new-list-modal';
 import { ShareModal } from './share-list-modal';
 
+function NewListButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="btn violet" onClick={onClick}>
+      <Icon name="plus" size={14} />Nouvelle liste
+    </button>
+  );
+}
+
 export default function ListsPage() {
   const [lists, setLists] = useState<ListData[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -81,12 +89,6 @@ export default function ListsPage() {
     return `radial-gradient(at 20% 30%, ${pals[0][1]}88 0%, transparent 60%), radial-gradient(at 80% 70%, ${(pals[1] ?? pals[0])[1]}88 0%, transparent 60%), #0A0A0F`;
   })();
 
-  const NewListBtn = () => (
-    <button className="btn violet" onClick={() => setShowModal(true)}>
-      <Icon name="plus" size={14} />Nouvelle liste
-    </button>
-  );
-
   if (loading) return <div className="page"><div style={{ color: 'var(--text-3)', fontSize: 13 }}>Chargement…</div></div>;
 
   if (!lists.length) return (
@@ -94,13 +96,13 @@ export default function ListsPage() {
       {showModal && <NewListModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
       <div className="page-h">
         <div><h1>Listes partagées</h1></div>
-        <NewListBtn />
+        <NewListButton onClick={() => setShowModal(true)} />
       </div>
       <div className="empty">
         <Icon name="lists" size={28} />
         <h3>Aucune liste</h3>
         <p>Crée ta première liste pour organiser tes shows.</p>
-        <NewListBtn />
+        <NewListButton onClick={() => setShowModal(true)} />
       </div>
     </div>
   );
@@ -122,7 +124,7 @@ export default function ListsPage() {
       )}
       <div className="page-h">
         <div><h1>Listes partagées</h1><div className="sub">Construites à plusieurs.</div></div>
-        <NewListBtn />
+        <NewListButton onClick={() => setShowModal(true)} />
       </div>
 
       <div className="lists-layout">
@@ -180,7 +182,6 @@ export default function ListsPage() {
                     <SortableListItem
                       key={item.show.id}
                       item={item}
-                      listId={list.id}
                       openItemMenu={openItemMenu}
                       setOpenItemMenu={setOpenItemMenu}
                       onRemove={showId => list && handleRemoveShow(list.id, showId)}

@@ -109,7 +109,7 @@ describe('GET /api/releases', () => {
     });
 
     // Shows en base
-    mockShowFindMany.mockImplementation(async ({ where }: any) => {
+    mockShowFindMany.mockImplementation(async ({ where }: { where: { anilistId?: unknown; tmdbId?: unknown } }) => {
       if (where.anilistId) {
         return [{ id: 'local-ds-id', anilistId: 700 }];
       }

@@ -36,7 +36,7 @@ vi.mock('@/lib/db', () => ({
 }));
 
 vi.mock('@/components/layout/sidebar', () => ({
-  Sidebar: ({ user }: any) => <div data-testid="sidebar">Sidebar {user.name}</div>,
+  Sidebar: ({ user }: { user: { name: string } }) => <div data-testid="sidebar">Sidebar {user.name}</div>,
 }));
 
 vi.mock('@/components/layout/topbar', () => ({

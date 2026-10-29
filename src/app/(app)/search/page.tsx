@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
-import { Poster } from '@/components/ui/poster';
 import { ProviderRow } from '@/components/ui/provider-logo';
 import { PALETTES } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
@@ -39,7 +38,6 @@ function RemoteCard({ result, onImport }: { result: RemoteResult; onImport: (r: 
     >
       <div className={`poster ${result.type === 'SERIES' ? 'series' : 'anime'}`} style={{ position: 'relative' }}>
         {imgUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt={result.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div className="bg" style={{ background: `linear-gradient(150deg, ${PALETTES[Math.abs(result.title.charCodeAt(0) ?? 0) % PALETTES.length][0]}, ${PALETTES[Math.abs(result.title.charCodeAt(0) ?? 0) % PALETTES.length][1]})` }} />
@@ -79,7 +77,6 @@ function LocalCard({ show }: { show: Show }) {
     >
       <div className={`poster ${show.type === 'SERIES' ? 'series' : 'anime'}`} style={{ position: 'relative' }}>
         {imgUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt={show.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div className="bg" style={{ background: `linear-gradient(150deg, ${pal[0]}, ${pal[1]})` }} />
@@ -102,35 +99,44 @@ export default function SearchPage() {
   const [q, setQ] = useState('');
   const [filt, setFilt] = useState<'all' | 'SERIES' | 'ANIME'>('all');
   const [onlyMyPlatforms, setOnlyMyPlatforms] = useState(false);
-  const [local, setLocal] = useState<Show[]>([]);
-  const [remote, setRemote] = useState<RemoteResult[]>([]);
+  const [localResults, setLocalResults] = useState<Show[]>([]);
+  const [remoteResults, setRemoteResults] = useState<RemoteResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  // Queries shorter than 2 characters show nothing, whatever the last results were
+  const hasQuery = q.length >= 2;
+  const local = hasQuery ? localResults : [];
+  const remote = hasQuery ? remoteResults : [];
+  const searchError = hasQuery ? lastError : null;
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    if (q.length < 2) { setLocal([]); setRemote([]); setSearchError(null); return; }
+    if (!hasQuery) return;
 
-    debounce.current = setTimeout(async () => {
+    // Cleared when the query changes, so a slow response never replaces newer results
+    let active = true;
+    const timer = setTimeout(async () => {
       setLoading(true);
-      setSearchError(null);
+      setLastError(null);
       try {
         const params = new URLSearchParams({ q });
         if (filt !== 'all') params.set('type', filt);
         if (onlyMyPlatforms) params.set('onlyMyPlatforms', 'true');
         const data = await apiFetch<{ local: Show[]; remote: RemoteResult[] }>(`/api/shows/search?${params}`);
-        setLocal(data.local ?? []);
-        setRemote(data.remote ?? []);
+        if (!active) return;
+        setLocalResults(data.local ?? []);
+        setRemoteResults(data.remote ?? []);
       } catch {
-        setSearchError('Impossible de lancer la recherche.');
-        setLocal([]); setRemote([]);
+        if (!active) return;
+        setLastError('Impossible de lancer la recherche.');
+        setLocalResults([]); setRemoteResults([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }, 300);
-  }, [q, filt, onlyMyPlatforms]);
+    return () => { active = false; clearTimeout(timer); };
+  }, [q, hasQuery, filt, onlyMyPlatforms]);
 
   const handleImport = (result: RemoteResult) => {
     startTransition(async () => {
@@ -174,7 +180,7 @@ export default function SearchPage() {
           <span style={{ fontSize: 11, color: '#FECACA', flexShrink: 0 }}>{searchError}</span>
         )}
         {q && !loading && (
-          <button className="chip" onClick={() => { setQ(''); setLocal([]); setRemote([]); setSearchError(null); }}>
+          <button className="chip" onClick={() => setQ('')}>
             Effacer
           </button>
         )}

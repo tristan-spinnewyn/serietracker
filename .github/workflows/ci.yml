@@ -59,11 +59,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # TODO: retirer `continue-on-error` une fois les erreurs ESLint existantes corrigées
-      # (10 erreurs sur main au moment de la mise en place de la CI).
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Type check
         run: npx tsc --noEmit

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { apiFetch } from '@/lib/fetch';
 import { upsertUserShow } from '@/lib/actions/shows';
+import { useApiQuery } from '@/hooks/use-api-query';
 import type { ReleaseItem } from '@/lib/services/releases';
 
 type Filter = 'all' | 'movies' | 'series' | 'anime';
@@ -185,20 +186,12 @@ function Section({ title, items, onImport }: { title: string; items: ReleaseItem
 export default function SortiesPage() {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>('all');
-  const [movies, setMovies] = useState<ReleaseItem[]>([]);
-  const [series, setSeries] = useState<ReleaseItem[]>([]);
-  const [anime, setAnime] = useState<ReleaseItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    apiFetch<{ movies: ReleaseItem[]; series: ReleaseItem[]; anime: ReleaseItem[] }>(`/api/releases?type=${filter}`)
-      .then(d => { setMovies(d.movies ?? []); setSeries(d.series ?? []); setAnime(d.anime ?? []); })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [filter]);
+  const { data, loading, error } = useApiQuery<{ movies: ReleaseItem[]; series: ReleaseItem[]; anime: ReleaseItem[] }>(
+    `/api/releases?type=${filter}`,
+  );
+  const movies = data?.movies ?? [];
+  const series = data?.series ?? [];
+  const anime = data?.anime ?? [];
 
   const handleImport = useCallback(async (item: ReleaseItem) => {
     try {

@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 
+type ProxyCallback = (req: { nextUrl: { pathname: string }; url: string; auth: unknown }) => Response;
+
 const { getCallback, setCallback } = vi.hoisted(() => {
-  let cb: any = null;
+  let cb: ProxyCallback | null = null;
   return {
-    getCallback: () => cb,
-    setCallback: (fn: any) => { cb = fn; },
+    getCallback: () => cb!,
+    setCallback: (fn: ProxyCallback) => { cb = fn; },
   };
 });
 

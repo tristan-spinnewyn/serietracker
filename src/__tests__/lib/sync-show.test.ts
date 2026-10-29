@@ -141,7 +141,7 @@ describe('syncShow', () => {
       return { ok: false } as Response;
     });
 
-    mockFindMany.mockImplementation(async (args: any) => {
+    mockFindMany.mockImplementation(async (args?: { where?: { notifyEnabled?: boolean } }) => {
       if (args?.where?.notifyEnabled) {
         return [{ userId: 'user-sub-1' }];
       }
@@ -180,9 +180,9 @@ describe('batchSyncAnilistShows', () => {
   });
 
   it('traite les shows du batch et comptabilise synced et errors', async () => {
-    const shows = [
-      { id: 's1', title: 'Show 1', anilistId: 10, status: 'RETURNING', totalSeasons: 1 } as any,
-      { id: 's2', title: 'Show 2', anilistId: 20, status: 'RETURNING', totalSeasons: 1 } as any,
+    const shows: Parameters<typeof batchSyncAnilistShows>[0] = [
+      { id: 's1', title: 'Show 1', anilistId: 10, status: 'RETURNING', totalSeasons: 1 },
+      { id: 's2', title: 'Show 2', anilistId: 20, status: 'RETURNING', totalSeasons: 1 },
     ];
 
     const dataMap = new Map();

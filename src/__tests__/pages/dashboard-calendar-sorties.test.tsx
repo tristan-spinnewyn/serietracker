@@ -274,6 +274,27 @@ describe('Dashboard, Calendar & Sorties Pages', () => {
       });
     });
 
+    it('ignores a slow response for a filter the user already left', async () => {
+      const movie = (id: string, title: string) => ({
+        id, title, type: 'MOVIE', score: null, status: 'En salles', posterUrl: null,
+        releaseDate: '2024-03-01', localId: null, userHasShow: false,
+      });
+      let resolveFirst!: (v: unknown) => void;
+      mockApiFetch
+        .mockReturnValueOnce(new Promise(r => { resolveFirst = r; }))
+        .mockResolvedValueOnce({ movies: [movie('m2', 'Fresh Movie')], series: [], anime: [] });
+
+      render(<SortiesPage />);
+      fireEvent.click(screen.getByRole('button', { name: /Films/ }));
+      await waitFor(() => expect(screen.getByText('Fresh Movie')).toBeDefined());
+
+      resolveFirst({ movies: [movie('m1', 'Stale Movie')], series: [], anime: [] });
+      await new Promise(r => setTimeout(r, 0));
+
+      expect(screen.queryByText('Stale Movie')).toBeNull();
+      expect(screen.getByText('Fresh Movie')).toBeDefined();
+    });
+
     it('affiche un message d\'erreur si le chargement échoue', async () => {
       mockApiFetch.mockRejectedValue(new Error('Erreur API'));
       render(<SortiesPage />);

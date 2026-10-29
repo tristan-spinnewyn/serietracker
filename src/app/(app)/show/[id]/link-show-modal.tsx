@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect, useRef } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Icon } from '@/components/ui/icon';
 import { linkShows } from '@/lib/actions/lists';
 import { apiFetch } from '@/lib/fetch';
@@ -13,20 +13,23 @@ export function LinkShowModal({ showId, onClose, onLinked }: {
   onLinked: (rel: RelationItem) => void;
 }) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<{ id: string; title: string; type: string; year: number | null; tmdbId: number | null; anilistId: number | null; posterPath: string | null }[]>([]);
+  const [lastResults, setLastResults] = useState<{ id: string; title: string; type: string; year: number | null; tmdbId: number | null; anilistId: number | null; posterPath: string | null }[]>([]);
   const [relType, setRelType] = useState<RelationType>('SEQUEL');
-  const [selected, setSelected] = useState<typeof results[0] | null>(null);
+  const [selected, setSelected] = useState<typeof lastResults[0] | null>(null);
   const [isPending, start] = useTransition();
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hasQuery = q.length >= 2;
+  const results = hasQuery ? lastResults : [];
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    if (q.length < 2) { setResults([]); return; }
-    debounce.current = setTimeout(async () => {
-      const d = await apiFetch<{ local: typeof results }>(`/api/shows/search?q=${encodeURIComponent(q)}`);
-      setResults((d.local ?? []).filter(s => s.id !== showId));
+    if (!hasQuery) return;
+    let active = true;
+    const timer = setTimeout(async () => {
+      const d = await apiFetch<{ local: typeof lastResults }>(`/api/shows/search?q=${encodeURIComponent(q)}`);
+      if (active) setLastResults((d.local ?? []).filter(s => s.id !== showId));
     }, 300);
-  }, [q, showId]);
+    return () => { active = false; clearTimeout(timer); };
+  }, [q, hasQuery, showId]);
 
   const handleLink = () => {
     if (!selected) return;

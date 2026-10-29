@@ -1,5 +1,4 @@
 import { MiniPoster } from '@/components/ui/poster';
-import { posterUrl } from '@/lib/constants';
 
 export interface ActivityEntry {
   id: string;

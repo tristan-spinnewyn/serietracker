@@ -8,12 +8,11 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { ListItem } from './lists-types';
 
-export function SortableListItem({ item, onRemove, openItemMenu, setOpenItemMenu, listId }: {
+export function SortableListItem({ item, onRemove, openItemMenu, setOpenItemMenu }: {
   item: ListItem;
   onRemove: (showId: string) => void;
   openItemMenu: string | null;
   setOpenItemMenu: (id: string | null) => void;
-  listId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.show.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : 'auto' as const };
