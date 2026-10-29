@@ -1,18 +1,11 @@
 import { db } from '@/lib/db';
 import { fetchTmdbDetail } from '@/lib/tmdb/client';
 import { fetchAnilistDetail } from '@/lib/anilist/client';
-import { nextSyncMs } from '@/lib/sync/sync-show';
-import type { Show, RelationType } from '@prisma/client';
+import { nextSyncMs } from '@/lib/sync/sync-schedule';
+import type { Show } from '@prisma/client';
 import type { TmdbSeason } from '@/lib/tmdb/client';
+import { ANILIST_RELATION_MAP, inverseRelationType } from '@/lib/shows/relations';
 
-const RELATION_MAP: Record<string, RelationType> = {
-  SEQUEL:      'SEQUEL',
-  PREQUEL:     'PREQUEL',
-  SIDE_STORY:  'SPINOFF',
-  ALTERNATIVE: 'ALTERNATIVE',
-  PARENT:      'PARENT',
-  OTHER:       'RELATED',
-};
 
 // ── TMDB ──────────────────────────────────────────────────────────────────────
 
@@ -127,7 +120,7 @@ export async function importShowFromAnilist(
   for (const rel of detail.relations) {
     try {
       const relShow = await importShowFromAnilist(rel.anilistId, visited);
-      const relType = RELATION_MAP[rel.relationType] ?? 'RELATED';
+      const relType = ANILIST_RELATION_MAP[rel.relationType] ?? 'RELATED';
 
       await db.showRelation.upsert({
         where: { fromShowId_toShowId: { fromShowId: show.id, toShowId: relShow.id } },
@@ -137,7 +130,7 @@ export async function importShowFromAnilist(
       await db.showRelation.upsert({
         where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: show.id } },
         update: {},
-        create: { fromShowId: relShow.id, toShowId: show.id, type: inverseType(relType) },
+        create: { fromShowId: relShow.id, toShowId: show.id, type: inverseRelationType(relType) },
       });
     } catch {
       // Import partiel acceptable (cycle coupé ou show introuvable)
@@ -145,13 +138,6 @@ export async function importShowFromAnilist(
   }
 
   return show;
-}
-
-function inverseType(t: RelationType): RelationType {
-  if (t === 'SEQUEL')  return 'PREQUEL';
-  if (t === 'PREQUEL') return 'SEQUEL';
-  if (t === 'PARENT')  return 'SPINOFF';
-  return t;
 }
 
 // Pour un show déjà en base : crée/répare les liens avec les autres shows en base
@@ -173,7 +159,7 @@ async function syncExistingRelationsChain(
       });
       if (!relShow) continue; // pas en base → on n'importe pas, juste on relie ce qui existe
 
-      const relType = RELATION_MAP[rel.relationType] ?? 'RELATED';
+      const relType = ANILIST_RELATION_MAP[rel.relationType] ?? 'RELATED';
       await db.showRelation.upsert({
         where: { fromShowId_toShowId: { fromShowId: showId, toShowId: relShow.id } },
         update: {},
@@ -182,7 +168,7 @@ async function syncExistingRelationsChain(
       await db.showRelation.upsert({
         where: { fromShowId_toShowId: { fromShowId: relShow.id, toShowId: showId } },
         update: {},
-        create: { fromShowId: relShow.id, toShowId: showId, type: inverseType(relType) },
+        create: { fromShowId: relShow.id, toShowId: showId, type: inverseRelationType(relType) },
       });
 
       if (!visited.has(rel.anilistId)) {

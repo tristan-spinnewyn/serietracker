@@ -3,14 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { compare, hash } from 'bcryptjs';
 import { z } from 'zod';
-import { auth } from '@/lib/auth';
+import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
 import { PROVIDERS } from '@/lib/constants';
 
 async function userId() {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error('Non authentifié');
-  return session.user.id;
+  return (await requireSession()).user.id;
 }
 
 // ── Profil ───────────────────────────────────────────────────────────────

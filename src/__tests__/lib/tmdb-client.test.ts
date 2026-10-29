@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchTmdb, fetchTmdbDetail } from '@/lib/tmdb/client';
+import { searchTmdb, fetchTmdbDetail, fetchTmdbProviders } from '@/lib/tmdb/client';
 
 describe('TMDB client', () => {
   const originalEnv = process.env.TMDB_READ_ACCESS_TOKEN;
@@ -184,6 +184,31 @@ describe('TMDB client', () => {
       const detail = await fetchTmdbDetail(123);
       expect(detail?.providers).toEqual([]);
       expect(detail?.providerLinks).toEqual({});
+    });
+  });
+
+  describe('fetchTmdbProviders', () => {
+    it('maps French streaming providers and links each one to the JustWatch page', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: { FR: { link: 'https://justwatch.com/fr/x', flatrate: [{ provider_id: 8 }, { provider_id: 9999 }], free: [{ provider_id: 8 }] } },
+        }),
+      });
+
+      expect(await fetchTmdbProviders(42)).toEqual({
+        providers: ['netflix'],
+        providerLinks: { netflix: 'https://justwatch.com/fr/x' },
+      });
+    });
+
+    it.each([
+      ['the request fails', () => Promise.resolve({ ok: false })],
+      ['TMDB has no French data', () => Promise.resolve({ ok: true, json: async () => ({ results: {} }) })],
+      ['the network errors', () => Promise.reject(new Error('offline'))],
+    ])('returns null when %s, so callers can keep their current providers', async (_label, impl) => {
+      globalThis.fetch = vi.fn().mockImplementation(impl);
+      expect(await fetchTmdbProviders(42)).toBeNull();
     });
   });
 });
