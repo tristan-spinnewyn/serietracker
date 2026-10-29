@@ -38,7 +38,8 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
     const nowWatched = !watched.has(epId);
     setWatched(prev => {
       const next = new Set(prev);
-      nowWatched ? next.add(epId) : next.delete(epId);
+      if (nowWatched) next.add(epId);
+      else next.delete(epId);
       return next;
     });
     startTransition(() => toggleEpisode(epId, nowWatched));

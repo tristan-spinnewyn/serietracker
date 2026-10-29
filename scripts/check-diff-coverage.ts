@@ -156,7 +156,7 @@ export function runDiffCoverageCheck(options?: {
   const diffCmd = getDiffCommand(options?.baseRef);
   try {
     diffText = execSync(diffCmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
-  } catch (err) {
+  } catch {
     // Si le diff échoue (ex: shallow clone sans origin/main), essayer git diff HEAD
     try {
       diffText = execSync('git diff HEAD --unified=0 -- src/', {

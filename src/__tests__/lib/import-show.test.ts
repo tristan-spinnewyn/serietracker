@@ -137,7 +137,7 @@ describe('importShowFromAnilist', () => {
   });
 
   it('importe le show, la saison 1, les épisodes et les relations', async () => {
-    mockFindUnique.mockImplementation(async ({ where }: any) => {
+    mockFindUnique.mockImplementation(async ({ where }: { where: { anilistId?: number } }) => {
       if (where.anilistId === 50) return null;
       if (where.anilistId === 51) return { id: 'rel-show-id', anilistId: 51 };
       return null;

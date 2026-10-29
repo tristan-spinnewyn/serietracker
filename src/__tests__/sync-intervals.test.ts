@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mocker les dépendances qui ont des effets de bord à l'import
 vi.mock('@/lib/db', () => ({ db: {} }));

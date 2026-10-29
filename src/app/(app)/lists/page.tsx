@@ -182,7 +182,6 @@ export default function ListsPage() {
                     <SortableListItem
                       key={item.show.id}
                       item={item}
-                      listId={list.id}
                       openItemMenu={openItemMenu}
                       setOpenItemMenu={setOpenItemMenu}
                       onRemove={showId => list && handleRemoveShow(list.id, showId)}

@@ -1,10 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Loose signatures to call NextAuth callbacks and providers with partial test inputs
+type TestCallback<R> = (params: object, request?: Request) => R;
+interface TestToken { id?: string; sessionVersion?: number }
+interface CapturedConfig {
+  providers: { options?: { authorize?: TestCallback<Promise<unknown>> }; authorize?: TestCallback<Promise<unknown>> }[];
+  callbacks: { jwt: TestCallback<Promise<TestToken | null>> };
+}
+const asCallback = <R,>(fn: unknown) => fn as TestCallback<R>;
+
 const { getConfig, setConfig, mockFindUnique, mockCompare } = vi.hoisted(() => {
-  let cfg: any = null;
+  let cfg: CapturedConfig | null = null;
   return {
-    getConfig: () => cfg,
-    setConfig: (val: any) => { cfg = val; },
+    getConfig: () => cfg!,
+    setConfig: (val: CapturedConfig) => { cfg = val; },
     mockFindUnique: vi.fn(),
     mockCompare: vi.fn(),
   };
@@ -46,7 +55,7 @@ describe('authConfig callbacks', () => {
     it('autorise les routes publiques sans session', () => {
       const publicPaths = ['/login', '/register', '/api/auth/session', '/api/health'];
       for (const p of publicPaths) {
-        const allowed = (authorized as any)({
+        const allowed = asCallback<boolean>(authorized)({
           auth: null,
           request: { nextUrl: { pathname: p } },
         });
@@ -55,7 +64,7 @@ describe('authConfig callbacks', () => {
     });
 
     it('autorise les routes privées avec une session utilisateur', () => {
-      const allowed = (authorized as any)({
+      const allowed = asCallback<boolean>(authorized)({
         auth: { user: { id: 'u1' } },
         request: { nextUrl: { pathname: '/dashboard' } },
       });
@@ -63,7 +72,7 @@ describe('authConfig callbacks', () => {
     });
 
     it('refuse les routes privées sans session', () => {
-      const allowed = (authorized as any)({
+      const allowed = asCallback<boolean>(authorized)({
         auth: null,
         request: { nextUrl: { pathname: '/dashboard' } },
       });
@@ -73,19 +82,19 @@ describe('authConfig callbacks', () => {
 
   describe('jwt callback', () => {
     it('ajoute user.id au token si user est présent', () => {
-      const token = (jwt as any)({ token: {}, user: { id: 'user-123' } });
+      const token = asCallback<TestToken>(jwt)({ token: {}, user: { id: 'user-123' } });
       expect(token.id).toBe('user-123');
     });
 
     it('retourne le token intact si user est absent', () => {
-      const token = (jwt as any)({ token: { id: 'existing' } });
+      const token = asCallback<TestToken>(jwt)({ token: { id: 'existing' } });
       expect(token.id).toBe('existing');
     });
   });
 
   describe('session callback', () => {
     it('attache token.id à session.user.id', () => {
-      const sess = (session as any)({
+      const sess = asCallback<{ user: { id?: string } }>(session)({
         session: { user: {} },
         token: { id: 'user-456' },
       });
@@ -93,7 +102,7 @@ describe('authConfig callbacks', () => {
     });
 
     it('ne modifie pas session.user.id si token.id est absent', () => {
-      const sess = (session as any)({
+      const sess = asCallback<{ user: { id?: string } }>(session)({
         session: { user: {} },
         token: {},
       });
@@ -110,7 +119,7 @@ describe('NextAuth credentials provider authorize', () => {
 
   const getAuthorize = () => {
     const prov = getConfig().providers[0];
-    return prov.options?.authorize ?? prov.authorize;
+    return (prov.options?.authorize ?? prov.authorize)!;
   };
 
   it('rejette des identifiants invalides (zod)', async () => {

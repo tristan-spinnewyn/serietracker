@@ -30,7 +30,10 @@ vi.mock('@/lib/actions/lists', () => ({
 
 // Mock @dnd-kit/core and @dnd-kit/sortable to keep testing simple and deterministic
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children, onDragEnd }: any) => (
+  DndContext: ({ children, onDragEnd }: {
+    children: React.ReactNode;
+    onDragEnd?: (event: { active: { id: string }; over: { id: string } }) => void;
+  }) => (
     <div>
       <button data-testid="simulate-drag" onClick={() => onDragEnd?.({ active: { id: 's1' }, over: { id: 's2' } })}>Drag</button>
       {children}
@@ -53,7 +56,7 @@ vi.mock('@dnd-kit/sortable', () => ({
     transition: null,
     isDragging: false,
   }),
-  arrayMove: (array: any[], from: number, to: number) => {
+  arrayMove: <T,>(array: T[], from: number, to: number) => {
     const copy = [...array];
     const [item] = copy.splice(from, 1);
     copy.splice(to, 0, item);

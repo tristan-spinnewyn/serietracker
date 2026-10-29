@@ -12,10 +12,11 @@ import {
 describe('Anilist client', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: any) => {
+    // Run delayed callbacks immediately so pacing and retries don't slow the tests
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
       fn();
-      return 0 as any;
-    });
+      return 0;
+    }) as unknown as typeof setTimeout);
   });
 
   describe('buildAnilistEpisodes', () => {

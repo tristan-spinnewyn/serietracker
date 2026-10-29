@@ -38,7 +38,6 @@ function RemoteCard({ result, onImport }: { result: RemoteResult; onImport: (r: 
     >
       <div className={`poster ${result.type === 'SERIES' ? 'series' : 'anime'}`} style={{ position: 'relative' }}>
         {imgUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt={result.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div className="bg" style={{ background: `linear-gradient(150deg, ${PALETTES[Math.abs(result.title.charCodeAt(0) ?? 0) % PALETTES.length][0]}, ${PALETTES[Math.abs(result.title.charCodeAt(0) ?? 0) % PALETTES.length][1]})` }} />
@@ -78,7 +77,6 @@ function LocalCard({ show }: { show: Show }) {
     >
       <div className={`poster ${show.type === 'SERIES' ? 'series' : 'anime'}`} style={{ position: 'relative' }}>
         {imgUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt={show.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div className="bg" style={{ background: `linear-gradient(150deg, ${pal[0]}, ${pal[1]})` }} />

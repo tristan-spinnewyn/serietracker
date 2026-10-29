@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/auth', () => ({
   handlers: {
@@ -14,10 +15,10 @@ describe('API [...nextauth]', () => {
     expect(GET).toBeDefined();
     expect(POST).toBeDefined();
 
-    const getRes = await (GET as any)();
+    const getRes = await GET(new NextRequest('http://localhost/api/auth/session'));
     expect(await getRes.text()).toBe('auth GET');
 
-    const postRes = await (POST as any)();
+    const postRes = await POST(new NextRequest('http://localhost/api/auth/signout', { method: 'POST' }));
     expect(await postRes.text()).toBe('auth POST');
   });
 });

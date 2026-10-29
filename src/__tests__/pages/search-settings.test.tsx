@@ -78,7 +78,7 @@ describe('Search & Settings Pages', () => {
       });
       global.fetch = vi.fn().mockResolvedValue({
         json: async () => ({ id: 'imported-archer' }),
-      } as any);
+      } as unknown as Response);
 
       render(<SearchPage />);
       const input = screen.getByPlaceholderText('Titre, studio, acteur…');
