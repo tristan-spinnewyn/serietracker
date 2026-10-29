@@ -4,10 +4,11 @@ import { compare } from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { authConfig } from '@/lib/auth.config';
+import { emailSchema } from '@/lib/validation';
 import { consumeRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(8),
 });
 

@@ -168,6 +168,12 @@ describe('NextAuth credentials provider authorize', () => {
     });
   });
 
+  it('looks the user up by the trimmed, lowercased email', async () => {
+    mockFindUnique.mockResolvedValue(null);
+    await getAuthorize()({ email: ' Test@Example.COM ', password: 'password123' });
+    expect(mockFindUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+  });
+
   describe('rate limiting', () => {
     const requestFrom = (ip: string) => new Request('http://localhost/api/auth/callback/credentials', {
       headers: { 'x-real-ip': ip },
