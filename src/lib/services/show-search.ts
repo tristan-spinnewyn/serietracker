@@ -1,20 +1,42 @@
 import { db } from '@/lib/db';
 import { searchTmdb } from '@/lib/tmdb/client';
 import { searchAnilist } from '@/lib/anilist/client';
-import type { MediaType } from '@prisma/client';
+import { hasAnimeSearchFilters, type AnimeSearchFilters } from '@/lib/anilist/search-filters';
+import type { MediaType, Prisma } from '@prisma/client';
+
+const withUserStatus = (userId: string) => ({
+  userShows: {
+    where: { userId },
+    select: { status: true },
+  },
+});
+
+/** Narrows local shows to the user's platforms when asked to. */
+async function platformFilter(userId: string, onlyMyPlatforms: boolean): Promise<Prisma.ShowWhereInput> {
+  if (!onlyMyPlatforms) return {};
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { platforms: true },
+  });
+  const platforms = user?.platforms ?? [];
+  return platforms.length ? { providers: { hasSome: platforms } } : {};
+}
 
 /**
  * Searches the local catalog first, then TMDB and AniList when fewer than
  * five local shows match, leaving out remote results already imported.
+ * With anime filters (genre, season), browses AniList instead and splits
+ * its results between shows already in the catalog and new ones.
  */
-export async function searchShows(userId: string, q: string, type: MediaType | null, onlyMyPlatforms: boolean) {
-  let userPlatforms: string[] = [];
-  if (onlyMyPlatforms) {
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { platforms: true },
-    });
-    userPlatforms = user?.platforms ?? [];
+export async function searchShows(
+  userId: string,
+  q: string,
+  type: MediaType | null,
+  onlyMyPlatforms: boolean,
+  animeFilters: AnimeSearchFilters = {},
+) {
+  if (hasAnimeSearchFilters(animeFilters)) {
+    return browseAnilist(userId, q, animeFilters, onlyMyPlatforms);
   }
 
   // ── 1. Base locale ───────────────────────────────────────────────────────
@@ -22,18 +44,11 @@ export async function searchShows(userId: string, q: string, type: MediaType | n
     where: {
       title: { contains: q, mode: 'insensitive' },
       ...(type ? { type } : {}),
-      ...(onlyMyPlatforms && userPlatforms.length
-        ? { providers: { hasSome: userPlatforms } }
-        : {}),
+      ...(await platformFilter(userId, onlyMyPlatforms)),
     },
     take: 20,
     orderBy: { syncPriority: 'desc' },
-    include: {
-      userShows: {
-        where: { userId: userId },
-        select: { status: true },
-      },
-    },
+    include: withUserStatus(userId),
   });
 
   // ── 2. Fallback remote si moins de 5 résultats locaux ────────────────────
@@ -57,4 +72,20 @@ export async function searchShows(userId: string, q: string, type: MediaType | n
   }
 
   return { local, remote };
+}
+
+async function browseAnilist(userId: string, q: string, filters: AnimeSearchFilters, onlyMyPlatforms: boolean) {
+  const results = await searchAnilist(q, filters);
+  if (!results.length) return { local: [], remote: [] };
+
+  const local = await db.show.findMany({
+    where: {
+      anilistId: { in: results.map(r => r.anilistId) },
+      ...(await platformFilter(userId, onlyMyPlatforms)),
+    },
+    include: withUserStatus(userId),
+  });
+
+  const localAniIds = new Set(local.map(s => s.anilistId));
+  return { local, remote: results.filter(r => !localAniIds.has(r.anilistId)) };
 }

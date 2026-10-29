@@ -103,6 +103,63 @@ describe('/api/shows/search', () => {
       }),
     );
   });
+
+  describe('anime filters', () => {
+    beforeEach(() => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+    });
+
+    it('browses AniList by genre and season without a search text, and never queries TMDB', async () => {
+      mockSearchAnilist.mockResolvedValue([
+        { anilistId: 1, title: 'Already here' },
+        { anilistId: 2, title: 'New one' },
+      ]);
+      mockShowFindMany.mockResolvedValue([{ id: 's1', title: 'Already here', tmdbId: null, anilistId: 1 }]);
+
+      const req = new NextRequest('http://localhost/api/shows/search?genre=Action&season=FALL&seasonYear=2026');
+      const body = await (await searchGet(req)).json();
+
+      expect(mockSearchAnilist).toHaveBeenCalledWith('', { genres: ['Action'], season: 'FALL', seasonYear: 2026 });
+      expect(mockSearchTmdb).not.toHaveBeenCalled();
+      expect(body.local.map((s: { id: string }) => s.id)).toEqual(['s1']);
+      expect(body.remote.map((r: { title: string }) => r.title)).toEqual(['New one']);
+    });
+
+    it('looks up the AniList results in the local catalog instead of matching the title', async () => {
+      mockSearchAnilist.mockResolvedValue([{ anilistId: 7, title: 'X' }]);
+      mockShowFindMany.mockResolvedValue([]);
+
+      await searchGet(new NextRequest('http://localhost/api/shows/search?q=Ti&genre=Drama'));
+
+      expect(mockSearchAnilist).toHaveBeenCalledWith('Ti', { genres: ['Drama'] });
+      expect(mockShowFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ anilistId: { in: [7] } }) }),
+      );
+    });
+
+    it('skips the local lookup when AniList finds nothing', async () => {
+      mockSearchAnilist.mockResolvedValue([]);
+
+      const body = await (await searchGet(new NextRequest('http://localhost/api/shows/search?season=WINTER'))).json();
+
+      expect(mockShowFindMany).not.toHaveBeenCalled();
+      expect(body).toEqual({ local: [], remote: [] });
+    });
+
+    it('keeps the platform filter on local shows', async () => {
+      mockUserFindUnique.mockResolvedValue({ platforms: ['crunchyroll'] });
+      mockSearchAnilist.mockResolvedValue([{ anilistId: 3, title: 'Y' }]);
+      mockShowFindMany.mockResolvedValue([]);
+
+      await searchGet(new NextRequest('http://localhost/api/shows/search?seasonYear=2025&onlyMyPlatforms=true'));
+
+      expect(mockShowFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ providers: { hasSome: ['crunchyroll'] } }),
+        }),
+      );
+    });
+  });
 });
 
 describe('/api/shows/import', () => {

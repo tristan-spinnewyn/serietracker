@@ -4,6 +4,7 @@ import {
   stripHtml, buildAnilistEpisodes, mapAnilistStatus, parseAnilistProviders, parseAnilistProviderLinks,
   type AnilistEpisode,
 } from '@/lib/anilist/mappers';
+import { hasAnimeSearchFilters, type AnimeSearchFilters } from '@/lib/anilist/search-filters';
 
 // Public API of the AniList integration (queries + re-exported helpers)
 export { getLastAnilistError } from '@/lib/anilist/gql';
@@ -40,11 +41,15 @@ export interface AnilistRelation {
   posterUrl: string | null;
 }
 
-export async function searchAnilist(q: string): Promise<AnilistSearchResult[]> {
+/**
+ * Searches AniList by title, by genre / season, or both. Without a title,
+ * results are sorted by popularity and a larger page is returned.
+ */
+export async function searchAnilist(q: string, filters: AnimeSearchFilters = {}): Promise<AnilistSearchResult[]> {
   const query = `
-    query ($search: String) {
-      Page(perPage: 10) {
-        media(search: $search, type: ANIME) {
+    query ($search: String, $genres: [String], $season: MediaSeason, $seasonYear: Int, $sort: [MediaSort], $perPage: Int) {
+      Page(perPage: $perPage) {
+        media(search: $search, genre_in: $genres, season: $season, seasonYear: $seasonYear, sort: $sort, type: ANIME) {
           id
           title { romaji english native }
           coverImage { large }
@@ -55,7 +60,18 @@ export async function searchAnilist(q: string): Promise<AnilistSearchResult[]> {
     }
   `;
 
-  const data = await gql<{ Page: { media: unknown[] } }>(query, { search: q });
+  const browsing = hasAnimeSearchFilters(filters);
+  // Unset variables are left out so AniList ignores the matching argument
+  const variables: Record<string, unknown> = {
+    ...(q ? { search: q } : {}),
+    ...(filters.genres?.length ? { genres: filters.genres } : {}),
+    ...(filters.season ? { season: filters.season } : {}),
+    ...(filters.seasonYear !== undefined ? { seasonYear: filters.seasonYear } : {}),
+    ...(q ? {} : { sort: ['POPULARITY_DESC'] }),
+    perPage: browsing ? 30 : 10,
+  };
+
+  const data = await gql<{ Page: { media: unknown[] } }>(query, variables);
   if (!data) return [];
 
   return (data.Page?.media ?? []).map((m: unknown) => {

@@ -96,6 +96,44 @@ describe('Anilist client', () => {
         overview: 'Humans fight titans',
       });
     });
+
+    const emptyPage = () => vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ data: { Page: { media: [] } } }),
+    } as unknown as Response);
+    const sentVariables = (fetchMock: ReturnType<typeof vi.fn>) =>
+      JSON.parse(fetchMock.mock.calls[0][1].body).variables;
+
+    it('sends only the search text when no filter is given', async () => {
+      const fetchMock = emptyPage();
+      globalThis.fetch = fetchMock;
+
+      await searchAnilist('Titan');
+      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', perPage: 10 });
+    });
+
+    it('browses by genre and season, most popular first, when there is no search text', async () => {
+      const fetchMock = emptyPage();
+      globalThis.fetch = fetchMock;
+
+      await searchAnilist('', { genres: ['Action'], season: 'FALL', seasonYear: 2026 });
+      expect(sentVariables(fetchMock)).toEqual({
+        genres: ['Action'],
+        season: 'FALL',
+        seasonYear: 2026,
+        sort: ['POPULARITY_DESC'],
+        perPage: 30,
+      });
+    });
+
+    it('combines the search text with filters', async () => {
+      const fetchMock = emptyPage();
+      globalThis.fetch = fetchMock;
+
+      await searchAnilist('Titan', { seasonYear: 2013 });
+      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', seasonYear: 2013, perPage: 30 });
+    });
   });
 
   describe('fetchAnilistDetail', () => {
