@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { fetchTmdbDetail } from '@/lib/tmdb/client';
 import { fetchAnilistDetail } from '@/lib/anilist/client';
-import { nextSyncMs } from '@/lib/sync/sync-show';
+import { nextSyncMs } from '@/lib/sync/sync-schedule';
 import type { Show } from '@prisma/client';
 import type { TmdbSeason } from '@/lib/tmdb/client';
 import { ANILIST_RELATION_MAP, inverseRelationType } from '@/lib/shows/relations';
