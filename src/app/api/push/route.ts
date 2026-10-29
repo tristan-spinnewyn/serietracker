@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { isAllowedPushEndpoint } from '@/lib/notifications/push-endpoint';
 
 const endpointSchema = z.string().url();
 
 const subSchema = z.object({
-  endpoint: endpointSchema,
+  endpoint: endpointSchema.refine(isAllowedPushEndpoint, { message: 'Unknown push service' }),
   keys: z.object({
     p256dh: z.string(),
     auth: z.string(),
