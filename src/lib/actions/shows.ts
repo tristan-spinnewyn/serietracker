@@ -6,87 +6,16 @@ import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
 import { idListSchema } from '@/lib/validation';
 import { consumeRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { completeFinishedShows, notifyCompletedSeasons } from '@/lib/services/watch-progress';
 import type { WatchStatus } from '@prisma/client';
 
-// Auto-passe le show en COMPLETED quand tous les épisodes sont vus (show terminé/annulé)
-async function checkShowComplete(userId: string, episodeIds: string[]) {
-  const eps = await db.episode.findMany({
-    where: { id: { in: episodeIds } },
-    select: { season: { select: { showId: true } } },
-  });
-  const showIds = [...new Set(eps.map(e => e.season.showId))];
-
-  for (const showId of showIds) {
-    const [show, userShow] = await Promise.all([
-      db.show.findUnique({ where: { id: showId }, select: { status: true } }),
-      db.userShow.findUnique({
-        where: { userId_showId: { userId, showId } },
-        select: { status: true },
-      }),
-    ]);
-
-    // Seulement si le show a fini de diffuser et que l'user le regardait / l'avait mis en pause
-    if (!show || !['ENDED', 'CANCELED'].includes(show.status)) continue;
-    if (!userShow || !['WATCHING', 'PAUSED'].includes(userShow.status)) continue;
-
-    const [totalEps, watchedEps] = await Promise.all([
-      db.episode.count({ where: { season: { showId } } }),
-      db.userEpisode.count({ where: { userId, episode: { season: { showId } } } }),
-    ]);
-
-    if (totalEps > 0 && watchedEps >= totalEps) {
-      await db.userShow.update({
-        where: { userId_showId: { userId, showId } },
-        data: { status: 'COMPLETED' },
-      });
-      revalidatePath('/dashboard');
-      revalidatePath(`/show/${showId}`);
-    }
-  }
-}
-
-async function checkSeasonComplete(userId: string, episodeIds: string[]) {
-  if (!episodeIds.length) return;
-
-  const episodes = await db.episode.findMany({
-    where: { id: { in: episodeIds } },
-    select: {
-      seasonId: true,
-      season: {
-        select: {
-          id: true, number: true,
-          showId: true,
-          show: { select: { title: true } },
-          episodes: { select: { id: true } },
-        },
-      },
-    },
-  });
-
-  const seasons = new Map(episodes.map(e => [e.seasonId, e.season]));
-
-  for (const season of seasons.values()) {
-    const allIds = season.episodes.map(e => e.id);
-    const watchedCount = await db.userEpisode.count({
-      where: { userId, episodeId: { in: allIds } },
-    });
-    if (watchedCount < allIds.length) continue;
-
-    const since = new Date(Date.now() - 7 * 86_400_000);
-    const already = await db.notification.findFirst({
-      where: { userId, showId: season.showId, type: 'SEASON_COMPLETE', createdAt: { gte: since } },
-    });
-    if (already) continue;
-
-    await db.notification.create({
-      data: {
-        userId,
-        type: 'SEASON_COMPLETE',
-        title: season.show.title,
-        body: `Tu as terminé la saison ${season.number} !`,
-        showId: season.showId,
-      },
-    });
+// Season notifications, then auto-completion of finished shows
+async function updateWatchProgress(userId: string, episodeIds: string[]) {
+  await notifyCompletedSeasons(userId, episodeIds);
+  const completedShowIds = await completeFinishedShows(userId, episodeIds);
+  for (const showId of completedShowIds) {
+    revalidatePath('/dashboard');
+    revalidatePath(`/show/${showId}`);
   }
 }
 
@@ -148,8 +77,7 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
       update: {},
       create: { userId: session.user.id, episodeId },
     });
-    await checkSeasonComplete(session.user.id, [episodeId]);
-    await checkShowComplete(session.user.id, [episodeId]);
+    await updateWatchProgress(session.user.id, [episodeId]);
   } else {
     await db.userEpisode.delete({
       where: { userId_episodeId: { userId: session.user.id, episodeId } },
@@ -191,8 +119,7 @@ export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
     ),
   );
 
-  await checkSeasonComplete(session.user.id, episodeIds);
-  await checkShowComplete(session.user.id, episodeIds);
+  await updateWatchProgress(session.user.id, episodeIds);
   revalidatePath('/show/[id]', 'page');
 }
 
@@ -264,7 +191,7 @@ export async function markShowAllWatched(showId: string) {
     data: { status: allAired ? 'COMPLETED' : 'WATCHING' },
   });
 
-  await checkSeasonComplete(userId, airedEpisodes.map(e => e.id));
+  await notifyCompletedSeasons(userId, airedEpisodes.map(e => e.id));
 
   revalidatePath(`/show/${showId}`);
   revalidatePath('/dashboard');

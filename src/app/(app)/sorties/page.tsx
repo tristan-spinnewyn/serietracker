@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/icon';
 import { apiFetch } from '@/lib/fetch';
 import { upsertUserShow } from '@/lib/actions/shows';
-import type { ReleaseItem } from '@/app/api/releases/route';
+import type { ReleaseItem } from '@/lib/services/releases';
 
 type Filter = 'all' | 'movies' | 'series' | 'anime';
 
