@@ -67,6 +67,25 @@ describe('Search & Settings Pages', () => {
   });
 
   describe('SearchPage', () => {
+    it('shows the API error and re-enables the card when an import fails', async () => {
+      mockApiFetch.mockImplementation(async (url: string) => {
+        if (url === '/api/shows/import') throw new Error("Trop d'imports, réessaie dans une minute.");
+        return { local: [], remote: [{ tmdbId: 100, title: 'Archer', type: 'SERIES', year: 2009, posterPath: null }] };
+      });
+
+      render(<SearchPage />);
+      fireEvent.change(screen.getByPlaceholderText('Titre, studio, acteur…'), { target: { value: 'Arc' } });
+      await waitFor(() => expect(screen.getByText('Archer')).toBeDefined());
+
+      fireEvent.click(screen.getByText('Archer'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Trop d'imports, réessaie dans une minute\./)).toBeDefined();
+      });
+      expect(screen.getByText('Archer').closest('button')?.disabled).toBe(false);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
     it('permet de taper une recherche et affiche les résultats locaux et distants', async () => {
       mockApiFetch.mockResolvedValue({
         local: [
@@ -76,10 +95,6 @@ describe('Search & Settings Pages', () => {
           { tmdbId: 100, title: 'Archer', type: 'SERIES', year: 2009, posterPath: null },
         ],
       });
-      global.fetch = vi.fn().mockResolvedValue({
-        json: async () => ({ id: 'imported-archer' }),
-      } as unknown as Response);
-
       render(<SearchPage />);
       const input = screen.getByPlaceholderText('Titre, studio, acteur…');
       fireEvent.change(input, { target: { value: 'Arc' } });
@@ -94,7 +109,7 @@ describe('Search & Settings Pages', () => {
       fireEvent.click(screen.getByText('Archer'));
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(mockApiFetch).toHaveBeenCalledWith(
           '/api/shows/import',
           expect.objectContaining({ method: 'POST' })
         );
