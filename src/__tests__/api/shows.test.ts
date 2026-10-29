@@ -168,6 +168,7 @@ describe('/api/shows/import', () => {
     const res = await importPost(req);
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toBe('API indisponible');
+    expect(body.error).toBe("Impossible d'importer ce titre pour le moment.");
+    expect(JSON.stringify(body)).not.toContain('API indisponible');
   });
 });

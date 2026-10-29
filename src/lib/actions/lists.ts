@@ -2,8 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { RelationType } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { idSchema, idListSchema } from '@/lib/validation';
+
+const MAX_LIST_ITEMS = 1000;
 
 async function getSession() {
   const session = await auth();
@@ -78,10 +82,15 @@ export async function removeShowFromList(listId: string, showId: string) {
 
 // ── Lier deux shows ──────────────────────────────────────────────────────────
 
-export async function linkShows(fromId: string, toId: string, type: import('@prisma/client').RelationType) {
-  await getSession();
+const linkSchema = z
+  .object({ fromId: idSchema, toId: idSchema, type: z.enum(RelationType) })
+  .refine(({ fromId, toId }) => fromId !== toId, { message: 'A show cannot be linked to itself' });
 
-  const inverseMap: Record<string, import('@prisma/client').RelationType> = {
+export async function linkShows(rawFromId: string, rawToId: string, rawType: RelationType) {
+  await getSession();
+  const { fromId, toId, type } = linkSchema.parse({ fromId: rawFromId, toId: rawToId, type: rawType });
+
+  const inverseMap: Record<string, RelationType> = {
     SEQUEL: 'PREQUEL', PREQUEL: 'SEQUEL', PARENT: 'SPINOFF',
     SPINOFF: 'PARENT', ALTERNATIVE: 'ALTERNATIVE', RELATED: 'RELATED',
   };
@@ -131,8 +140,9 @@ export async function addMemberToList(listId: string, email: string) {
 
 // ── Réordonner les items d'une liste ────────────────────────────────────────
 
-export async function reorderList(listId: string, orderedShowIds: string[]) {
+export async function reorderList(listId: string, rawShowIds: string[]) {
   const session = await getSession();
+  const orderedShowIds = idListSchema(MAX_LIST_ITEMS).parse(rawShowIds);
 
   const member = await db.listMember.findUnique({
     where: { listId_userId: { listId, userId: session.user.id } },

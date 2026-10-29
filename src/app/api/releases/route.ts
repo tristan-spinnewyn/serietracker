@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { stripHtml } from '@/lib/anilist/client';
+import { apiErrorResponse } from '@/lib/api-error';
 
 const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w300';
@@ -239,7 +240,6 @@ export async function GET(req: NextRequest) {
       anime:  withLocalId(anime),
     });
   } catch (err) {
-    console.error('[GET /api/releases]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return apiErrorResponse('GET /api/releases', err);
   }
 }

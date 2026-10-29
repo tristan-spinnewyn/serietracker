@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const { mockAuth, mockUpsert, mockDelete } = vi.hoisted(() => ({
+const { mockAuth, mockUpsert, mockDeleteMany, mockFindUnique } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockUpsert: vi.fn(),
-  mockDelete: vi.fn(),
+  mockDeleteMany: vi.fn(),
+  mockFindUnique: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: mockAuth }));
@@ -12,7 +13,8 @@ vi.mock('@/lib/db', () => ({
   db: {
     pushSubscription: {
       upsert: mockUpsert,
-      delete: mockDelete,
+      deleteMany: mockDeleteMany,
+      findUnique: mockFindUnique,
     },
   },
 }));
@@ -47,8 +49,34 @@ describe('/api/push', () => {
       expect(res.status).toBe(400);
     });
 
+    it('returns 400 when the body is not valid JSON', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      const req = new NextRequest('http://localhost/api/push', { method: 'POST', body: '{not json' });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 403 and leaves the subscription untouched when the endpoint belongs to another user', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'attacker' } });
+      mockFindUnique.mockResolvedValue({ userId: 'victim' });
+
+      const req = new NextRequest('http://localhost/api/push', {
+        method: 'POST',
+        body: JSON.stringify({
+          endpoint: 'https://fcm.googleapis.com/victim',
+          keys: { p256dh: 'evil', auth: 'evil' },
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
     it('enregistre l\'abonnement push en base et renvoie 200', async () => {
       mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      mockFindUnique.mockResolvedValue(null);
       mockUpsert.mockResolvedValue({});
 
       const req = new NextRequest('http://localhost/api/push', {
@@ -86,9 +114,9 @@ describe('/api/push', () => {
       expect(res.status).toBe(401);
     });
 
-    it('supprime l\'abonnement et renvoie 200', async () => {
+    it('only deletes the subscription when it belongs to the current user', async () => {
       mockAuth.mockResolvedValue({ user: { id: 'u1' } });
-      mockDelete.mockResolvedValue({});
+      mockDeleteMany.mockResolvedValue({ count: 1 });
 
       const req = new NextRequest('http://localhost/api/push', {
         method: 'DELETE',
@@ -97,9 +125,22 @@ describe('/api/push', () => {
 
       const res = await DELETE(req);
       expect(res.status).toBe(200);
-      expect(mockDelete).toHaveBeenCalledWith({
-        where: { endpoint: 'https://test.com' },
+      expect(mockDeleteMany).toHaveBeenCalledWith({
+        where: { endpoint: 'https://test.com', userId: 'u1' },
       });
+    });
+
+    it.each([
+      ['invalid JSON', '{not json'],
+      ['missing endpoint', JSON.stringify({})],
+      ['non-URL endpoint', JSON.stringify({ endpoint: 'nope' })],
+    ])('returns 400 for %s', async (_label, body) => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      const req = new NextRequest('http://localhost/api/push', { method: 'DELETE', body });
+
+      const res = await DELETE(req);
+      expect(res.status).toBe(400);
+      expect(mockDeleteMany).not.toHaveBeenCalled();
     });
   });
 });

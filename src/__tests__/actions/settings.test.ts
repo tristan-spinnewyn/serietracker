@@ -91,5 +91,27 @@ describe('settings actions', () => {
       });
       expect(mockRevalidatePath).toHaveBeenCalledWith('/', 'layout');
     });
+
+    it('removes duplicate platforms', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      mockUpdate.mockResolvedValue({});
+
+      await updatePlatforms(['netflix', 'netflix']);
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { platforms: ['netflix'] },
+      });
+    });
+
+    it.each([
+      ['an unknown platform', ['netflix', 'not-a-provider']],
+      ['a non-array payload', 'netflix'],
+      ['non-string values', [42]],
+    ])('rejects %s', async (_label, platforms) => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      // @ts-expect-error -- server actions receive untrusted input at runtime
+      await expect(updatePlatforms(platforms)).rejects.toThrow();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
   });
 });

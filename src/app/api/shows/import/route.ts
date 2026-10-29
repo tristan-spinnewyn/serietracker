@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
+import { apiErrorResponse } from '@/lib/api-error';
 import { importShowFromTmdb, importShowFromAnilist } from '@/lib/sync/import-show';
 
 const schema = z.union([
@@ -23,8 +24,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ id: show.id });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erreur inconnue';
-    console.error('[import]', message, err);
-    return NextResponse.json({ error: message }, { status: 502 });
+    return apiErrorResponse('POST /api/shows/import', err, {
+      status: 502,
+      message: "Impossible d'importer ce titre pour le moment.",
+    });
   }
 }
