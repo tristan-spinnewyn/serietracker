@@ -113,6 +113,19 @@ describe('Auth & Root Pages', () => {
       });
     });
 
+    it('tells the user to wait when login attempts are rate limited', async () => {
+      mockSignIn.mockResolvedValue({ error: 'CredentialsSignin', code: 'rate_limited' });
+
+      render(<LoginPage />);
+      fireEvent.change(screen.getByPlaceholderText('toi@example.com'), { target: { value: 'user@test.com' } });
+      fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'password123' } });
+      fireEvent.click(screen.getByRole('button', { name: /Se connecter/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Trop de tentatives. Réessaie dans quelques minutes.')).toBeDefined();
+      });
+    });
+
     it('affiche un message d\'erreur si signIn échoue', async () => {
       mockSignIn.mockResolvedValue({ error: 'CredentialsSignin' });
 

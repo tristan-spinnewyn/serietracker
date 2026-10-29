@@ -89,6 +89,7 @@ import {
   toggleShowNotif,
   rateShow,
 } from '@/lib/actions/shows';
+import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('shows actions', () => {
   beforeEach(() => {
@@ -197,6 +198,16 @@ describe('shows actions', () => {
       await resyncShow('show-1');
       expect(mockSyncShow).toHaveBeenCalledWith('show-1');
       expect(mockRevalidatePath).toHaveBeenCalledWith('/show/show-1');
+    });
+
+    it('refuses an 11th resync within a minute', async () => {
+      resetRateLimits();
+      mockSyncShow.mockResolvedValue(undefined);
+      for (let i = 0; i < 10; i++) await resyncShow('show-1');
+      mockSyncShow.mockClear();
+
+      await expect(resyncShow('show-1')).rejects.toThrow('Trop de synchronisations');
+      expect(mockSyncShow).not.toHaveBeenCalled();
     });
   });
 

@@ -126,6 +126,12 @@ function urlBase64ToUint8Array(base64: string): ArrayBuffer {
   return buf;
 }
 
+const ANILIST_SYNC_ERRORS: Record<Exclude<SyncResult['status'], 'ok'>, string> = {
+  not_found: 'Utilisateur AniList introuvable ou liste privée.',
+  rate_limited: "Trop d'imports AniList récents. Réessaie dans une heure.",
+  error: "Erreur lors de l'import.",
+};
+
 function AnilistSyncCard() {
   const [anilistUser, setAnilistUser] = useState('');
   const [result, setResult] = useState<SyncResult | null>(null);
@@ -177,20 +183,12 @@ function AnilistSyncCard() {
           {result.errors > 0 && `, ${result.errors} erreur${result.errors !== 1 ? 's' : ''}`}
         </div>
       )}
-      {result && result.status === 'not_found' && (
+      {result && result.status !== 'ok' && (
         <div style={{
           marginTop: 12, padding: '8px 14px', borderRadius: 8, fontSize: 13,
           background: 'rgba(251,113,133,0.12)', border: '1px solid rgba(251,113,133,0.25)', color: '#FECACA',
         }}>
-          ✕ Utilisateur AniList introuvable ou liste privée.
-        </div>
-      )}
-      {result && result.status === 'error' && (
-        <div style={{
-          marginTop: 12, padding: '8px 14px', borderRadius: 8, fontSize: 13,
-          background: 'rgba(251,113,133,0.12)', border: '1px solid rgba(251,113,133,0.25)', color: '#FECACA',
-        }}>
-          ✕ Erreur lors de l'import.
+          ✕ {ANILIST_SYNC_ERRORS[result.status]}
         </div>
       )}
     </Card>

@@ -35,6 +35,7 @@ vi.mock('@/lib/sync/import-show', () => ({
 
 import { GET as searchGet } from '@/app/api/shows/search/route';
 import { POST as importPost } from '@/app/api/shows/import/route';
+import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('/api/shows/search', () => {
   beforeEach(() => {
@@ -107,6 +108,24 @@ describe('/api/shows/search', () => {
 describe('/api/shows/import', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRateLimits();
+  });
+
+  it('returns 429 with Retry-After after 30 imports in a minute', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+    mockImportShowFromTmdb.mockResolvedValue({ id: 'show-1' });
+    const importOnce = () => importPost(new NextRequest('http://localhost/api/shows/import', {
+      method: 'POST',
+      body: JSON.stringify({ tmdbId: 1234 }),
+    }));
+
+    for (let i = 0; i < 30; i++) await importOnce();
+    mockImportShowFromTmdb.mockClear();
+
+    const res = await importOnce();
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0);
+    expect(mockImportShowFromTmdb).not.toHaveBeenCalled();
   });
 
   it('renvoie 401 si non connecté', async () => {
