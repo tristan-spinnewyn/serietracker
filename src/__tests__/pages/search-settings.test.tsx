@@ -263,5 +263,17 @@ describe('Search & Settings Pages', () => {
         expect(screen.getByText(/Utilisateur AniList introuvable/)).toBeDefined();
       });
     });
+
+    it('tells the user to wait when AniList syncs are rate limited', async () => {
+      mockSyncFromAnilist.mockResolvedValueOnce({ status: 'rate_limited' });
+      render(<SettingsClient user={mockUser} stats={mockStats} vapidPublicKey="" />);
+
+      fireEvent.change(screen.getByPlaceholderText('Ton pseudo AniList'), { target: { value: 'otaku' } });
+      fireEvent.click(screen.getByRole('button', { name: /Importer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Trop d'imports AniList/)).toBeDefined();
+      });
+    });
   });
 });
