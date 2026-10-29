@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getCalendarEpisodes } from '@/lib/services/calendar';
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,44 +12,5 @@ export async function GET(req: NextRequest) {
 
   if (!y || !m) return NextResponse.json({ episodes: [] });
 
-  const start = new Date(y, m - 1, 1);
-  const end   = new Date(y, m, 1);
-
-  const episodes = await db.episode.findMany({
-    where: {
-      airDate: { gte: start, lt: end },
-      season: {
-        show: {
-          userShows: scope === 'me'
-            ? { some: { userId: session.user.id } }
-            : { some: {} },
-        },
-      },
-    },
-    include: {
-      season: {
-        include: {
-          show: {
-            include: {
-              userShows: { where: { userId: session.user.id }, select: { notifyEnabled: true } },
-            },
-          },
-        },
-      },
-    },
-    orderBy: { airDate: 'asc' },
-  });
-
-  return NextResponse.json({
-    episodes: episodes.map(e => ({
-      id: e.id,
-      showId: e.season.show.id,
-      showTitle: e.season.show.title,
-      showType: e.season.show.type,
-      seasonNumber: e.season.number,
-      episodeNumber: e.number,
-      airDate: e.airDate,
-      notifyEnabled: e.season.show.userShows[0]?.notifyEnabled ?? true,
-    })),
-  });
+  return NextResponse.json(await getCalendarEpisodes(session.user.id, y, m, scope));
 }

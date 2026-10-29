@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { compare, hash } from 'bcryptjs';
+import { changePassword, updateProfile as saveProfile } from '@/lib/services/accounts';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
@@ -20,10 +20,7 @@ const profileSchema = z.object({
 
 export async function updateProfile(data: { name: string; color: string }) {
   const id = await userId();
-  const { name, color } = profileSchema.parse(data);
-  const initials = name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
-
-  await db.user.update({ where: { id }, data: { name, color, initials } });
+  await saveProfile(id, profileSchema.parse(data));
   revalidatePath('/', 'layout');
   return { success: true };
 }
@@ -38,16 +35,7 @@ const pwSchema = z.object({
 export async function updatePassword(data: { current: string; next: string }) {
   const id = await userId();
   const { current, next } = pwSchema.parse(data);
-
-  const user = await db.user.findUniqueOrThrow({ where: { id } });
-  const valid = await compare(current, user.passwordHash);
-  if (!valid) return { error: 'Mot de passe actuel incorrect.' };
-
-  await db.user.update({
-    where: { id },
-    data: { passwordHash: await hash(next, 12), sessionVersion: { increment: 1 } },
-  });
-  return { success: true };
+  return changePassword(id, current, next);
 }
 
 // ── Plateformes ───────────────────────────────────────────────────────────

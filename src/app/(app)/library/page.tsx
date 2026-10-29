@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getLibrary } from '@/lib/services/library';
 import { Poster } from '@/components/ui/poster';
 import { Icon } from '@/components/ui/icon';
 import { posterUrl } from '@/lib/constants';
@@ -23,76 +23,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const validStatus = STATUS_TABS.some(t => t.key === status) ? (status as WatchStatus) : undefined;
   const validType = type === 'ANIME' || type === 'SERIES' ? type : undefined;
 
-  const userShows = await db.userShow.findMany({
-    where: {
-      userId,
-      ...(validStatus ? { status: validStatus } : {}),
-      ...(validType ? { show: { type: validType } } : {}),
-    },
-    include: {
-      show: {
-        include: {
-          seasons: { select: { _count: { select: { episodes: true } } } },
-        },
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  const watchedEps = await db.userEpisode.findMany({
-    where: { userId },
-    select: { episodeId: true },
-  });
-  const watchedSet = new Set(watchedEps.map(e => e.episodeId));
-
-  const allUserShows = validStatus || validType
-    ? await db.userShow.findMany({
-        where: { userId },
-        include: { show: { select: { type: true } } },
-      })
-    : userShows;
-
-  const counts = {
-    total: allUserShows.length,
-    WATCHING: allUserShows.filter(us => us.status === 'WATCHING').length,
-    PLAN_TO_WATCH: allUserShows.filter(us => us.status === 'PLAN_TO_WATCH').length,
-    COMPLETED: allUserShows.filter(us => us.status === 'COMPLETED').length,
-    PAUSED: allUserShows.filter(us => us.status === 'PAUSED').length,
-    DROPPED: allUserShows.filter(us => us.status === 'DROPPED').length,
-    ANIME: allUserShows.filter(us => us.show.type === 'ANIME').length,
-    SERIES: allUserShows.filter(us => us.show.type === 'SERIES').length,
-  };
-
-  const rows = userShows.map(us => {
-    const totalEps = us.show.seasons.reduce((a, s) => a + s._count.episodes, 0);
-    const showEpIds = new Set<string>();
-    return { userShow: us, show: us.show, totalEps, showEpIds };
-  });
-
-  const showIds = rows.map(r => r.show.id);
-  const episodesByShow = await db.episode.findMany({
-    where: { season: { showId: { in: showIds } } },
-    select: { id: true, season: { select: { showId: true } } },
-  });
-
-  const epsByShowId = new Map<string, string[]>();
-  for (const ep of episodesByShow) {
-    const arr = epsByShowId.get(ep.season.showId) ?? [];
-    arr.push(ep.id);
-    epsByShowId.set(ep.season.showId, arr);
-  }
-
-  const cards = rows.map(r => {
-    const epIds = epsByShowId.get(r.show.id) ?? [];
-    const watchedCount = epIds.filter(id => watchedSet.has(id)).length;
-    return {
-      show: r.show,
-      status: r.userShow.status,
-      rating: r.userShow.rating,
-      totalEps: r.totalEps,
-      watchedCount,
-    };
-  });
+  const { cards, counts } = await getLibrary(userId, { status: validStatus, type: validType });
 
   function buildHref(params: { status?: string | null; type?: string | null }) {
     const p = new URLSearchParams();

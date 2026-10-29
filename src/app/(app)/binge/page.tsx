@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getFinishedShows } from '@/lib/services/finished-shows';
 import { Poster } from '@/components/ui/poster';
 import { Icon } from '@/components/ui/icon';
 import { posterUrl } from '@/lib/constants';
@@ -10,85 +10,7 @@ export default async function BingePage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [followingRows, followingSeriesRows, watchedEps, discoverShows, discoverSeriesShows] = await Promise.all([
-    // Animes suivis (WATCHING / PAUSED) dont la diffusion est terminée
-    db.userShow.findMany({
-      where: {
-        userId,
-        status: { in: ['WATCHING', 'PAUSED', 'PLAN_TO_WATCH'] },
-        show: { type: 'ANIME', status: { in: ['ENDED', 'CANCELED'] } },
-      },
-      include: {
-        show: {
-          include: { seasons: { include: { episodes: { select: { id: true } } } } },
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-    }),
-    // Séries suivies (WATCHING / PAUSED / À regarder) dont la diffusion est terminée
-    db.userShow.findMany({
-      where: {
-        userId,
-        status: { in: ['WATCHING', 'PAUSED', 'PLAN_TO_WATCH'] },
-        show: { type: 'SERIES', status: { in: ['ENDED', 'CANCELED'] } },
-      },
-      include: {
-        show: {
-          include: { seasons: { include: { episodes: { select: { id: true } } } } },
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-    }),
-    // Épisodes vus par l'user
-    db.userEpisode.findMany({ where: { userId }, select: { episodeId: true } }),
-    // Animes terminés en base pas encore dans la liste de l'user
-    db.show.findMany({
-      where: {
-        type: 'ANIME',
-        status: { in: ['ENDED', 'CANCELED'] },
-        userShows: { none: { userId } },
-      },
-      include: { seasons: { select: { _count: { select: { episodes: true } } } } },
-      orderBy: { lastSyncedAt: 'desc' },
-      take: 12,
-    }),
-    // Séries terminées en base pas encore dans la liste de l'user
-    db.show.findMany({
-      where: {
-        type: 'SERIES',
-        status: { in: ['ENDED', 'CANCELED'] },
-        userShows: { none: { userId } },
-      },
-      include: { seasons: { select: { _count: { select: { episodes: true } } } } },
-      orderBy: { lastSyncedAt: 'desc' },
-      take: 12,
-    }),
-  ]);
-
-  const watchedIds = new Set(watchedEps.map(r => r.episodeId));
-
-  const defaultRuntime = (type: string) => type === 'ANIME' ? 24 : 45;
-
-  const mapFollowing = (rows: typeof followingRows) => rows.map(us => {
-    const show = us.show;
-    const allEps = show.seasons.flatMap(s => s.episodes);
-    const total = allEps.length;
-    const watched = allEps.filter(e => watchedIds.has(e.id)).length;
-    const runtime = show.runtime ?? defaultRuntime(show.type);
-    const remainingHours = Math.round((total - watched) * runtime / 60 * 10) / 10;
-    return { show, watched, total, remainingHours };
-  });
-
-  const mapDiscover = (rows: typeof discoverShows) => rows.map(show => {
-    const total = show.seasons.reduce((a, s) => a + s._count.episodes, 0);
-    const hours = Math.round(total * (show.runtime ?? defaultRuntime(show.type)) / 60);
-    return { show, total, hours };
-  });
-
-  const following = mapFollowing(followingRows);
-  const followingSeries = mapFollowing(followingSeriesRows);
-  const discover = mapDiscover(discoverShows);
-  const discoverSeries = mapDiscover(discoverSeriesShows);
+  const { following, followingSeries, discover, discoverSeries } = await getFinishedShows(userId);
 
   return (
     <div className="page">

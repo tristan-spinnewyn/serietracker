@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { saveSubscription, removeSubscription } from '@/lib/services/push-subscriptions';
 import { z } from 'zod';
 import { isAllowedPushEndpoint } from '@/lib/notifications/push-endpoint';
 
@@ -28,28 +28,9 @@ export async function POST(req: NextRequest) {
   const parsed = subSchema.safeParse(await readJson(req));
   if (!parsed.success) return NextResponse.json({ error: 'Invalid' }, { status: 400 });
 
-  const { endpoint, keys } = parsed.data;
-
-  // Never let a user overwrite the keys of a subscription owned by someone else
-  const existing = await db.pushSubscription.findUnique({
-    where: { endpoint },
-    select: { userId: true },
-  });
-  if (existing && existing.userId !== session.user.id) {
+  if (!(await saveSubscription(session.user.id, parsed.data))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-
-  await db.pushSubscription.upsert({
-    where: { endpoint },
-    update: { p256dh: keys.p256dh, auth: keys.auth },
-    create: {
-      userId: session.user.id,
-      endpoint,
-      p256dh: keys.p256dh,
-      auth: keys.auth,
-    },
-  });
-
   return NextResponse.json({ success: true });
 }
 
@@ -61,9 +42,7 @@ export async function DELETE(req: NextRequest) {
   const parsed = unsubSchema.safeParse(await readJson(req));
   if (!parsed.success) return NextResponse.json({ error: 'Invalid' }, { status: 400 });
 
-  await db.pushSubscription.deleteMany({
-    where: { endpoint: parsed.data.endpoint, userId: session.user.id },
-  });
+  await removeSubscription(session.user.id, parsed.data.endpoint);
 
   return NextResponse.json({ success: true });
 }

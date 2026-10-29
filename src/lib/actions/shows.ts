@@ -6,14 +6,15 @@ import { requireSession } from '@/lib/session';
 import { db } from '@/lib/db';
 import { idListSchema } from '@/lib/validation';
 import { consumeRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { completeFinishedShows, notifyCompletedSeasons } from '@/lib/services/watch-progress';
+import {
+  markEpisodeWatched, unmarkEpisodeWatched, markEpisodesWatched, markCompletedShowsWatched,
+  markShowWatched, unmarkShowWatched,
+} from '@/lib/services/watch-history';
 import type { WatchStatus } from '@prisma/client';
 
-// Season notifications, then auto-completion of finished shows
-async function updateWatchProgress(userId: string, episodeIds: string[]) {
-  await notifyCompletedSeasons(userId, episodeIds);
-  const completedShowIds = await completeFinishedShows(userId, episodeIds);
-  for (const showId of completedShowIds) {
+// Pages showing a show that just moved to COMPLETED
+function revalidateCompleted(showIds: string[]) {
+  for (const showId of showIds) {
     revalidatePath('/dashboard');
     revalidatePath(`/show/${showId}`);
   }
@@ -59,29 +60,9 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
   const session = await requireSession();
 
   if (watched) {
-    // Auto-ajoute le show en WATCHING s'il n'est pas encore dans la liste
-    const episode = await db.episode.findUnique({
-      where: { id: episodeId },
-      select: { season: { select: { showId: true } } },
-    });
-    if (episode) {
-      await db.userShow.upsert({
-        where: { userId_showId: { userId: session.user.id, showId: episode.season.showId } },
-        update: {},
-        create: { userId: session.user.id, showId: episode.season.showId, status: 'WATCHING' },
-      });
-    }
-
-    await db.userEpisode.upsert({
-      where: { userId_episodeId: { userId: session.user.id, episodeId } },
-      update: {},
-      create: { userId: session.user.id, episodeId },
-    });
-    await updateWatchProgress(session.user.id, [episodeId]);
+    revalidateCompleted(await markEpisodeWatched(session.user.id, episodeId));
   } else {
-    await db.userEpisode.delete({
-      where: { userId_episodeId: { userId: session.user.id, episodeId } },
-    }).catch(() => null);
+    await unmarkEpisodeWatched(session.user.id, episodeId);
   }
 
   revalidatePath('/show/[id]', 'page');
@@ -109,17 +90,7 @@ export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
   const episodeIds = idListSchema(MAX_BATCH_EPISODES).parse(rawEpisodeIds);
   if (!episodeIds.length) return;
 
-  await db.$transaction(
-    episodeIds.map(episodeId =>
-      db.userEpisode.upsert({
-        where: { userId_episodeId: { userId: session.user.id, episodeId } },
-        update: {},
-        create: { userId: session.user.id, episodeId },
-      }),
-    ),
-  );
-
-  await updateWatchProgress(session.user.id, episodeIds);
+  revalidateCompleted(await markEpisodesWatched(session.user.id, episodeIds));
   revalidatePath('/show/[id]', 'page');
 }
 
@@ -127,71 +98,19 @@ export async function markEpisodesWatchedBatch(rawEpisodeIds: string[]) {
 
 export async function markAllCompletedEpisodesWatched(): Promise<{ count: number }> {
   const session = await requireSession();
-  const userId = session.user.id;
-
-  const completedShowIds = (
-    await db.userShow.findMany({
-      where: { userId, status: 'COMPLETED' },
-      select: { showId: true },
-    })
-  ).map(us => us.showId);
-
-  if (!completedShowIds.length) return { count: 0 };
-
-  const episodes = await db.episode.findMany({
-    where: { season: { showId: { in: completedShowIds } } },
-    select: { id: true },
-  });
-
-  const result = await db.userEpisode.createMany({
-    data: episodes.map(ep => ({ userId, episodeId: ep.id })),
-    skipDuplicates: true,
-  });
+  const count = await markCompletedShowsWatched(session.user.id);
+  if (!count) return { count };
 
   revalidatePath('/termine');
   revalidatePath('/dashboard');
-  return { count: result.count };
+  return { count };
 }
 
 // ── Tout marquer comme vu et passer en Terminé ──────────────────────────────
 
 export async function markShowAllWatched(showId: string) {
   const session = await requireSession();
-  const userId = session.user.id;
-
-  await db.userShow.upsert({
-    where: { userId_showId: { userId, showId } },
-    update: {},
-    create: { userId, showId, status: 'WATCHING' },
-  });
-
-  const now = new Date();
-  const airedEpisodes = await db.episode.findMany({
-    where: {
-      season: { showId },
-      OR: [{ airDate: null }, { airDate: { lte: now } }],
-    },
-    select: { id: true },
-  });
-
-  if (!airedEpisodes.length) return;
-
-  await db.userEpisode.createMany({
-    data: airedEpisodes.map(ep => ({ userId, episodeId: ep.id })),
-    skipDuplicates: true,
-  });
-
-  const totalEpisodes = await db.episode.count({
-    where: { season: { showId } },
-  });
-  const allAired = airedEpisodes.length === totalEpisodes;
-
-  await db.userShow.update({
-    where: { userId_showId: { userId, showId } },
-    data: { status: allAired ? 'COMPLETED' : 'WATCHING' },
-  });
-
-  await notifyCompletedSeasons(userId, airedEpisodes.map(e => e.id));
+  if (!(await markShowWatched(session.user.id, showId))) return;
 
   revalidatePath(`/show/${showId}`);
   revalidatePath('/dashboard');
@@ -201,33 +120,7 @@ export async function markShowAllWatched(showId: string) {
 
 export async function unmarkShowAllWatched(showId: string) {
   const session = await requireSession();
-  const userId = session.user.id;
-
-  const episodes = await db.episode.findMany({
-    where: { season: { showId } },
-    select: { id: true },
-  });
-
-  if (episodes.length > 0) {
-    await db.userEpisode.deleteMany({
-      where: {
-        userId,
-        episodeId: { in: episodes.map(e => e.id) },
-      },
-    });
-  }
-
-  const userShow = await db.userShow.findUnique({
-    where: { userId_showId: { userId, showId } },
-    select: { status: true },
-  });
-
-  if (userShow && (userShow.status === 'COMPLETED' || userShow.status === 'WATCHING')) {
-    await db.userShow.update({
-      where: { userId_showId: { userId, showId } },
-      data: { status: 'PLAN_TO_WATCH' },
-    });
-  }
+  await unmarkShowWatched(session.user.id, showId);
 
   revalidatePath(`/show/${showId}`);
   revalidatePath('/dashboard');

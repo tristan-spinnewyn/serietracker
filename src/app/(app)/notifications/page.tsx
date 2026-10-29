@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getRecentNotifications } from '@/lib/services/notifications';
 import { Icon } from '@/components/ui/icon';
 import { MarkReadOnMount } from './mark-read';
 import type { NotifType } from '@prisma/client';
@@ -26,11 +26,7 @@ export default async function NotificationsPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const notifications = await db.notification.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  const notifications = await getRecentNotifications(userId);
 
   const hasUnread = notifications.some(n => !n.read);
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getCompletedShows } from '@/lib/services/library';
 import { Poster } from '@/components/ui/poster';
 import { Icon } from '@/components/ui/icon';
 import { posterUrl } from '@/lib/constants';
@@ -13,33 +13,7 @@ export default async function TerminePage({ searchParams }: { searchParams: Prom
 
   const whereType = type === 'ANIME' ? 'ANIME' : type === 'SERIES' ? 'SERIES' : undefined;
 
-  const completed = await db.userShow.findMany({
-    where: {
-      userId,
-      status: 'COMPLETED',
-      ...(whereType ? { show: { type: whereType } } : {}),
-    },
-    include: {
-      show: {
-        include: {
-          seasons: { select: { _count: { select: { episodes: true } } } },
-        },
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  const rows = completed.map(us => {
-    const totalEps = us.show.seasons.reduce((a, s) => a + s._count.episodes, 0);
-    const hours = Math.round(totalEps * (us.show.runtime ?? 24) / 60);
-    return { show: us.show, totalEps, hours, rating: us.rating };
-  });
-
-  const totalHours = rows.reduce((a, r) => a + r.hours, 0);
-  const totalEps   = rows.reduce((a, r) => a + r.totalEps, 0);
-
-  const animeCount  = completed.filter(us => us.show.type === 'ANIME').length;
-  const seriesCount = completed.filter(us => us.show.type === 'SERIES').length;
+  const { rows, totalHours, totalEps, animeCount, seriesCount } = await getCompletedShows(userId, whereType);
 
   return (
     <div className="page">
@@ -47,19 +21,19 @@ export default async function TerminePage({ searchParams }: { searchParams: Prom
         <div>
           <h1>Terminé</h1>
           <div className="sub">
-            {completed.length > 0
-              ? <>{completed.length} œuvre{completed.length > 1 ? 's' : ''} · {totalEps.toLocaleString('fr-FR')} épisodes · ~{totalHours}h regardées</>
+            {rows.length > 0
+              ? <>{rows.length} œuvre{rows.length > 1 ? 's' : ''} · {totalEps.toLocaleString('fr-FR')} épisodes · ~{totalHours}h regardées</>
               : 'Aucun show terminé pour l\'instant.'}
           </div>
         </div>
-        {completed.length > 0 && <MarkAllWatchedButton />}
+        {rows.length > 0 && <MarkAllWatchedButton />}
       </div>
 
       {/* Filtres */}
       {(animeCount > 0 && seriesCount > 0) && (
         <div className="filter-chips" style={{ marginBottom: 8 }}>
           <Link href="/termine" className={`chip ${!type ? 'on' : ''}`}>
-            Tout <span style={{ opacity: 0.6, marginLeft: 4 }}>{completed.length + (whereType ? (whereType === 'ANIME' ? seriesCount : animeCount) : 0)}</span>
+            Tout <span style={{ opacity: 0.6, marginLeft: 4 }}>{rows.length + (whereType ? (whereType === 'ANIME' ? seriesCount : animeCount) : 0)}</span>
           </Link>
           <Link href="/termine?type=ANIME" className={`chip ${type === 'ANIME' ? 'on' : ''}`}>
             Animes <span style={{ opacity: 0.6, marginLeft: 4 }}>{animeCount}</span>
