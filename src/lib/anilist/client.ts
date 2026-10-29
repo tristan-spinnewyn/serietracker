@@ -47,9 +47,9 @@ export interface AnilistRelation {
  */
 export async function searchAnilist(q: string, filters: AnimeSearchFilters = {}): Promise<AnilistSearchResult[]> {
   const query = `
-    query ($search: String, $genres: [String], $season: MediaSeason, $seasonYear: Int, $sort: [MediaSort], $perPage: Int) {
+    query ($search: String, $genres: [String], $season: MediaSeason, $seasonYear: Int, $status: MediaStatus, $sort: [MediaSort], $perPage: Int) {
       Page(perPage: $perPage) {
-        media(search: $search, genre_in: $genres, season: $season, seasonYear: $seasonYear, sort: $sort, type: ANIME) {
+        media(search: $search, genre_in: $genres, season: $season, seasonYear: $seasonYear, status: $status, sort: $sort, type: ANIME) {
           id
           title { romaji english native }
           coverImage { large }
@@ -67,6 +67,7 @@ export async function searchAnilist(q: string, filters: AnimeSearchFilters = {})
     ...(filters.genres?.length ? { genres: filters.genres } : {}),
     ...(filters.season ? { season: filters.season } : {}),
     ...(filters.seasonYear !== undefined ? { seasonYear: filters.seasonYear } : {}),
+    ...(filters.finishedOnly ? { status: 'FINISHED' } : {}),
     ...(q ? {} : { sort: ['POPULARITY_DESC'] }),
     perPage: browsing ? 30 : 10,
   };

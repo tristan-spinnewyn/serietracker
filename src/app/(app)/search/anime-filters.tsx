@@ -1,6 +1,8 @@
 'use client';
 
-import { ANIME_GENRES, ANIME_SEASONS, type AnimeSearchFilters, type AnimeSeason } from '@/lib/anilist/search-filters';
+import {
+  ANIME_GENRES, ANIME_SEASONS, currentAnimeSeason, type AnimeSearchFilters, type AnimeSeason,
+} from '@/lib/anilist/search-filters';
 
 const SEASON_LABELS: Record<AnimeSeason, string> = {
   WINTER: 'Hiver',
@@ -16,9 +18,25 @@ const YEARS = Array.from({ length: new Date().getFullYear() + 2 - FIRST_YEAR }, 
 /** Genre / season / year pickers for browsing AniList from the search page. */
 export function AnimeFilters({ value, onChange }: { value: AnimeSearchFilters; onChange: (f: AnimeSearchFilters) => void }) {
   const genre = value.genres?.[0] ?? '';
+  const current = currentAnimeSeason();
+  const onCurrentSeason = value.season === current.season && value.seasonYear === current.seasonYear;
 
   return (
     <div className="filter-chips">
+      <button
+        className={`chip ${onCurrentSeason ? 'on' : ''}`}
+        onClick={() => onChange(onCurrentSeason
+          ? { ...value, season: undefined, seasonYear: undefined }
+          : { ...value, ...current })}
+      >
+        Saison en cours
+      </button>
+      <button
+        className={`chip ${value.finishedOnly ? 'on' : ''}`}
+        onClick={() => onChange({ ...value, finishedOnly: value.finishedOnly ? undefined : true })}
+      >
+        Terminés
+      </button>
       <select
         aria-label="Genre"
         className={`chip ${genre ? 'on' : ''}`}

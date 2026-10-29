@@ -57,6 +57,7 @@ vi.mock('@/lib/actions/anilist-sync', () => ({
 }));
 
 import SearchPage from '@/app/(app)/search/page';
+import { currentAnimeSeason } from '@/lib/anilist/search-filters';
 import SettingsPage from '@/app/(app)/settings/page';
 import { SettingsClient } from '@/app/(app)/settings/settings-client';
 
@@ -153,6 +154,40 @@ describe('Search & Settings Pages', () => {
         '/api/shows/search?q=&type=ANIME&genre=Action&season=FALL&seasonYear=2026',
       );
       expect(screen.queryByText(/Tape au moins 2 caractères/)).toBeNull();
+    });
+
+    it('picks the current season in one click, and clears it on a second click', async () => {
+      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      const { season, seasonYear } = currentAnimeSeason();
+      render(<SearchPage />);
+      fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Saison en cours' }));
+
+      expect((screen.getByLabelText('Saison') as HTMLSelectElement).value).toBe(season);
+      expect((screen.getByLabelText('Année') as HTMLSelectElement).value).toBe(String(seasonYear));
+      await waitFor(() => expect(mockApiFetch).toHaveBeenLastCalledWith(
+        `/api/shows/search?q=&type=ANIME&season=${season}&seasonYear=${seasonYear}`,
+      ));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Saison en cours' }));
+      expect((screen.getByLabelText('Saison') as HTMLSelectElement).value).toBe('');
+      expect((screen.getByLabelText('Année') as HTMLSelectElement).value).toBe('');
+    });
+
+    it('toggles a finished-only filter', async () => {
+      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      render(<SearchPage />);
+      fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
+
+      const finished = screen.getByRole('button', { name: 'Terminés' });
+      fireEvent.click(finished);
+
+      expect(finished.className).toContain('on');
+      await waitFor(() => expect(mockApiFetch).toHaveBeenLastCalledWith('/api/shows/search?q=&type=ANIME&finished=true'));
+
+      fireEvent.click(finished);
+      expect(finished.className).not.toContain('on');
     });
 
     it('drops the anime filters when switching back to series', async () => {
