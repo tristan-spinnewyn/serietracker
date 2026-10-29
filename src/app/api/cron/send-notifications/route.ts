@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sendPushToUser } from '@/lib/notifications/push';
-
-function verifyToken(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
-}
+import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 
 export async function POST(req: NextRequest) {
-  if (!verifyToken(req)) {
+  if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
