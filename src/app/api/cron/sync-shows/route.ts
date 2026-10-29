@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { syncShow, batchSyncAnilistShows } from '@/lib/sync/sync-show';
+import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 
 // TMDB : 1 appel principal + ~N appels saisons par show → 100 shows ≈ 500 appels
 // AniList : 1 appel GraphQL par tranche de 50 grâce à id_in → 200 shows ≈ 4 appels
 const TMDB_BATCH    = 100;
 const ANILIST_BATCH = 200;
 
-function verifyToken(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
-}
-
 export async function POST(req: NextRequest) {
-  if (!verifyToken(req)) {
+  if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -90,6 +90,19 @@ describe('Cron API routes', () => {
     });
   });
 
+  it.each([
+    ['sync-shows', syncShowsPost],
+    ['send-notifications', sendNotifsPost],
+  ])('/api/cron/%s returns 401 for "Bearer undefined" when CRON_SECRET is unset', async (name, post) => {
+    delete process.env.CRON_SECRET;
+    const req = new NextRequest(`http://localhost/api/cron/${name}`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer undefined' },
+    });
+    const res = await post(req);
+    expect(res.status).toBe(401);
+  });
+
   describe('/api/cron/send-notifications', () => {
     it('renvoie 401 si token manquant', async () => {
       const req = new NextRequest('http://localhost/api/cron/send-notifications', { method: 'POST' });
