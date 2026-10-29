@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Icon } from '@/components/ui/icon';
+import { getSafeCallbackUrl } from '@/lib/safe-redirect';
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const callbackUrl = params.get('callbackUrl') || '/dashboard';
+  const callbackUrl = getSafeCallbackUrl(params.get('callbackUrl'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

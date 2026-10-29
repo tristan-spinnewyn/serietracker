@@ -3,18 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const { mockRedirect, mockPush, mockRefresh, mockSignIn, mockRegisterAction } = vi.hoisted(() => ({
+const { mockRedirect, mockPush, mockRefresh, mockSignIn, mockRegisterAction, searchParamsState } = vi.hoisted(() => ({
   mockRedirect: vi.fn(),
   mockPush: vi.fn(),
   mockRefresh: vi.fn(),
   mockSignIn: vi.fn(),
   mockRegisterAction: vi.fn(),
+  searchParamsState: { current: new URLSearchParams() },
 }));
 
 vi.mock('next/navigation', () => ({
   redirect: mockRedirect,
   useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParamsState.current,
 }));
 
 vi.mock('next/font/google', () => ({
@@ -38,6 +39,7 @@ import RegisterPage from '@/app/(auth)/register/page';
 describe('Auth & Root Pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    searchParamsState.current = new URLSearchParams();
   });
 
   describe('RootPage', () => {
@@ -91,6 +93,23 @@ describe('Auth & Root Pages', () => {
           redirect: false,
         });
         expect(mockPush).toHaveBeenCalledWith('/dashboard');
+      });
+    });
+
+    it.each([
+      ['an internal callbackUrl', '/show/abc', '/show/abc'],
+      ['an external callbackUrl', 'https://evil.com', '/dashboard'],
+    ])('redirects safely after login with %s', async (_label, callbackUrl, expected) => {
+      searchParamsState.current = new URLSearchParams({ callbackUrl });
+      mockSignIn.mockResolvedValue({ error: null });
+
+      render(<LoginPage />);
+      fireEvent.change(screen.getByPlaceholderText('toi@example.com'), { target: { value: 'user@test.com' } });
+      fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'password123' } });
+      fireEvent.click(screen.getByRole('button', { name: /Se connecter/i }));
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(expected);
       });
     });
 
