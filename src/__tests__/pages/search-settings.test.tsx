@@ -125,6 +125,49 @@ describe('Search & Settings Pages', () => {
       fireEvent.click(screen.getByRole('button', { name: /Mes plateformes/i }));
     });
 
+    it('only offers genre and season filters once the anime type is picked', () => {
+      render(<SearchPage />);
+      expect(screen.queryByLabelText('Genre')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
+
+      expect(screen.getByLabelText('Genre')).toBeDefined();
+      expect(screen.getByLabelText('Saison')).toBeDefined();
+      expect(screen.getByLabelText('Année')).toBeDefined();
+    });
+
+    it('browses anime by genre, season and year without typing a title', async () => {
+      mockApiFetch.mockResolvedValue({
+        local: [],
+        remote: [{ anilistId: 9, title: 'Fall Hit', type: 'ANIME', year: 2026, posterPath: null }],
+      });
+      render(<SearchPage />);
+      fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
+
+      fireEvent.change(screen.getByLabelText('Genre'), { target: { value: 'Action' } });
+      fireEvent.change(screen.getByLabelText('Saison'), { target: { value: 'FALL' } });
+      fireEvent.change(screen.getByLabelText('Année'), { target: { value: '2026' } });
+
+      await waitFor(() => expect(screen.getByText('Fall Hit')).toBeDefined());
+      expect(mockApiFetch).toHaveBeenLastCalledWith(
+        '/api/shows/search?q=&type=ANIME&genre=Action&season=FALL&seasonYear=2026',
+      );
+      expect(screen.queryByText(/Tape au moins 2 caractères/)).toBeNull();
+    });
+
+    it('drops the anime filters when switching back to series', async () => {
+      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      render(<SearchPage />);
+      fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
+      fireEvent.change(screen.getByLabelText('Genre'), { target: { value: 'Drama' } });
+      await waitFor(() => expect(mockApiFetch).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Séries' }));
+
+      expect(screen.queryByLabelText('Genre')).toBeNull();
+      expect(screen.getByText(/Tape au moins 2 caractères/)).toBeDefined();
+    });
+
     it('affiche un message d\'erreur si la recherche échoue', async () => {
       mockApiFetch.mockRejectedValue(new Error('Erreur réseau'));
       render(<SearchPage />);

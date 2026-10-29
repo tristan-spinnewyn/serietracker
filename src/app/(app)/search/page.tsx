@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/icon';
 import { ProviderRow } from '@/components/ui/provider-logo';
@@ -8,6 +8,8 @@ import { PALETTES } from '@/lib/constants';
 import { apiFetch } from '@/lib/fetch';
 import type { Show } from '@prisma/client';
 import { JustWatchCredit } from '@/components/ui/justwatch-credit';
+import { hasAnimeSearchFilters, toAnimeSearchParams, type AnimeSearchFilters } from '@/lib/anilist/search-filters';
+import { AnimeFilters } from './anime-filters';
 
 // Résultat distant (TMDB ou AniList, pas encore en DB)
 interface RemoteResult {
@@ -108,10 +110,14 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [animeFilters, setAnimeFilters] = useState<AnimeSearchFilters>({});
   const [, startTransition] = useTransition();
 
-  // Queries shorter than 2 characters show nothing, whatever the last results were
-  const hasQuery = q.length >= 2;
+  // Anime filters only apply while the anime type is picked
+  const activeAnimeFilters = useMemo(() => (filt === 'ANIME' ? animeFilters : {}), [filt, animeFilters]);
+  const browsing = hasAnimeSearchFilters(activeAnimeFilters);
+  // Queries shorter than 2 characters show nothing, whatever the last results were, unless browsing
+  const hasQuery = q.length >= 2 || browsing;
   const local = hasQuery ? localResults : [];
   const remote = hasQuery ? remoteResults : [];
   const searchError = hasQuery ? lastError : null;
@@ -125,9 +131,10 @@ export default function SearchPage() {
       setLoading(true);
       setLastError(null);
       try {
-        const params = new URLSearchParams({ q });
+        const params = new URLSearchParams({ q: q.length >= 2 ? q : '' });
         if (filt !== 'all') params.set('type', filt);
         if (onlyMyPlatforms) params.set('onlyMyPlatforms', 'true');
+        toAnimeSearchParams(activeAnimeFilters, params);
         const data = await apiFetch<{ local: Show[]; remote: RemoteResult[] }>(`/api/shows/search?${params}`);
         if (!active) return;
         setLocalResults(data.local ?? []);
@@ -141,7 +148,7 @@ export default function SearchPage() {
       }
     }, 300);
     return () => { active = false; clearTimeout(timer); };
-  }, [q, hasQuery, filt, onlyMyPlatforms]);
+  }, [q, hasQuery, filt, onlyMyPlatforms, activeAnimeFilters]);
 
   const handleImport = async (result: RemoteResult): Promise<boolean> => {
     setImportError(null);
@@ -216,6 +223,8 @@ export default function SearchPage() {
         )}
       </div>
 
+      {filt === 'ANIME' && <AnimeFilters value={animeFilters} onChange={setAnimeFilters} />}
+
       {/* Résultats locaux */}
       {local.length > 0 && (
         <>
@@ -255,7 +264,7 @@ export default function SearchPage() {
       )}
 
       {/* État vide */}
-      {q.length >= 2 && !loading && !hasResults && (
+      {hasQuery && !loading && !hasResults && (
         <div className="empty">
           <Icon name="search" size={28} />
           <h3>Aucun résultat</h3>
@@ -263,10 +272,11 @@ export default function SearchPage() {
         </div>
       )}
 
-      {q.length < 2 && (
+      {!hasQuery && (
         <div style={{ marginTop: 48, textAlign: 'center', color: 'var(--text-3)', fontSize: 13.5 }}>
           <Icon name="search" size={22} style={{ display: 'block', margin: '0 auto 10px', opacity: 0.3 }} />
           Tape au moins 2 caractères pour lancer la recherche
+          {filt === 'ANIME' && ', ou choisis un genre, une saison ou une année'}
         </div>
       )}
 
