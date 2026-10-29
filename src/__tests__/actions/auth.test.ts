@@ -19,13 +19,19 @@ vi.mock('bcryptjs', () => ({
   hash: mockHash,
 }));
 
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-real-ip': '198.51.100.1' }),
+}));
+
 import { registerAction } from '@/lib/actions/auth';
+import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('registerAction', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRateLimits();
     process.env = { ...originalEnv, ALLOW_REGISTRATION: 'true' };
   });
 
@@ -107,5 +113,19 @@ describe('registerAction', () => {
         initials: 'JP',
       }),
     });
+  });
+
+  it('blocks a 6th registration attempt from the same IP within an hour', async () => {
+    mockFindUnique.mockResolvedValue(null);
+    mockHash.mockResolvedValue('hashed_pw');
+    mockCreate.mockResolvedValue({ id: 'new-user' });
+
+    for (let i = 0; i < 5; i++) {
+      await registerAction({ name: 'Bot', email: `bot${i}@example.com`, password: 'securePassword1' });
+    }
+    const res = await registerAction({ name: 'Bot', email: 'bot5@example.com', password: 'securePassword1' });
+
+    expect(res).toEqual({ error: 'Trop de tentatives. Réessaie plus tard.' });
+    expect(mockCreate).toHaveBeenCalledTimes(5);
   });
 });

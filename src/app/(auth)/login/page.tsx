@@ -27,7 +27,9 @@ function LoginForm() {
         redirect: false,
       });
       if (res?.error) {
-        setError('Email ou mot de passe incorrect.');
+        setError(res.code === 'rate_limited'
+          ? 'Trop de tentatives. Réessaie dans quelques minutes.'
+          : 'Email ou mot de passe incorrect.');
       } else {
         router.push(callbackUrl);
         router.refresh();

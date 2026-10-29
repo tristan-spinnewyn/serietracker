@@ -37,10 +37,12 @@ vi.mock('@/lib/anilist/client', () => ({
 }));
 
 import { syncFromAnilist } from '@/lib/actions/anilist-sync';
+import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('syncFromAnilist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRateLimits();
   });
 
   it('renvoie { status: "error" } si non connecté', async () => {
@@ -99,5 +101,16 @@ describe('syncFromAnilist', () => {
 
     const res = await syncFromAnilist('otaku');
     expect(res).toEqual({ status: 'ok', imported: 0, skipped: 0, errors: 1 });
+  });
+
+  it('returns rate_limited after 3 syncs in an hour without calling AniList', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+    mockFetchAnilistUserList.mockResolvedValue([]);
+
+    for (let i = 0; i < 3; i++) await syncFromAnilist('otaku');
+    mockFetchAnilistUserList.mockClear();
+
+    expect(await syncFromAnilist('otaku')).toEqual({ status: 'rate_limited' });
+    expect(mockFetchAnilistUserList).not.toHaveBeenCalled();
   });
 });

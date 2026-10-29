@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { idListSchema } from '@/lib/validation';
+import { consumeRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import type { WatchStatus } from '@prisma/client';
 
 // Auto-passe le show en COMPLETED quand tous les épisodes sont vus (show terminé/annulé)
@@ -167,7 +168,10 @@ export async function toggleEpisode(episodeId: string, watched: boolean) {
 // ── Réimporter manuellement un show ─────────────────────────────────────────
 
 export async function resyncShow(showId: string) {
-  await getSession();
+  const session = await getSession();
+  if (!consumeRateLimit(`resync:${session.user.id}`, RATE_LIMITS.resyncPerUser).allowed) {
+    throw new Error('Trop de synchronisations, réessaie dans une minute.');
+  }
   const { syncShow } = await import('@/lib/sync/sync-show');
   await syncShow(showId);
   revalidatePath(`/show/${showId}`);

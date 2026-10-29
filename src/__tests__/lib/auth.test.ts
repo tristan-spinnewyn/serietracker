@@ -11,6 +11,7 @@ const { getConfig, setConfig, mockFindUnique, mockCompare } = vi.hoisted(() => {
 });
 
 vi.mock('next-auth', () => ({
+  CredentialsSignin: class extends Error { code = 'credentials'; },
   default: vi.fn((cfg) => {
     setConfig(cfg);
     return {
@@ -36,6 +37,7 @@ vi.mock('@/lib/db', () => ({
 
 import { authConfig } from '@/lib/auth.config';
 import '@/lib/auth';
+import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('authConfig callbacks', () => {
   const { authorized, jwt, session } = authConfig.callbacks!;
@@ -103,6 +105,7 @@ describe('authConfig callbacks', () => {
 describe('NextAuth credentials provider authorize', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRateLimits();
   });
 
   const getAuthorize = () => {
@@ -151,6 +154,38 @@ describe('NextAuth credentials provider authorize', () => {
       id: 'u1',
       email: 'test@example.com',
       name: 'Testeur',
+    });
+  });
+
+  describe('rate limiting', () => {
+    const requestFrom = (ip: string) => new Request('http://localhost/api/auth/callback/credentials', {
+      headers: { 'x-real-ip': ip },
+    });
+
+    it('blocks an email after 10 attempts, whatever its case, without checking the password', async () => {
+      mockFindUnique.mockResolvedValue(null);
+      const authorize = getAuthorize();
+      for (let i = 0; i < 10; i++) {
+        await authorize({ email: 'victim@example.com', password: 'password123' }, requestFrom(`10.0.0.${i}`));
+      }
+      mockFindUnique.mockClear();
+
+      await expect(
+        authorize({ email: 'Victim@Example.com', password: 'password123' }, requestFrom('10.0.1.1')),
+      ).rejects.toMatchObject({ code: 'rate_limited' });
+      expect(mockFindUnique).not.toHaveBeenCalled();
+    });
+
+    it('blocks an IP after 30 attempts spread over different emails', async () => {
+      mockFindUnique.mockResolvedValue(null);
+      const authorize = getAuthorize();
+      for (let i = 0; i < 30; i++) {
+        await authorize({ email: `user${i}@example.com`, password: 'password123' }, requestFrom('203.0.113.5'));
+      }
+
+      await expect(
+        authorize({ email: 'other@example.com', password: 'password123' }, requestFrom('203.0.113.5')),
+      ).rejects.toMatchObject({ code: 'rate_limited' });
     });
   });
 });
