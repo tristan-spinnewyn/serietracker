@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getUserLists } from '@/lib/services/shared-lists';
 import { apiErrorResponse } from '@/lib/api-error';
 
 export async function GET() {
@@ -8,40 +8,7 @@ export async function GET() {
     const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const lists = await db.sharedList.findMany({
-      where: { members: { some: { userId: session.user.id } } },
-      select: {
-        id: true,
-        name: true,
-        emoji: true,
-        color: true,
-        members: {
-          select: {
-            user: {
-              select: { id: true, name: true, color: true, initials: true },
-            },
-          },
-        },
-        items: {
-          select: {
-            id: true,
-            addedBy: {
-              select: { name: true, color: true, initials: true },
-            },
-            show: {
-              select: {
-                id: true, title: true, type: true, year: true,
-                network: true, tmdbId: true, anilistId: true, posterPath: true,
-              },
-            },
-          },
-          orderBy: { position: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return NextResponse.json({ lists });
+    return NextResponse.json(await getUserLists(session.user.id));
   } catch (err) {
     return apiErrorResponse('GET /api/lists', err);
   }

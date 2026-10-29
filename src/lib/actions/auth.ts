@@ -1,9 +1,8 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { hash } from 'bcryptjs';
 import { z } from 'zod';
-import { db } from '@/lib/db';
+import { createAccount } from '@/lib/services/accounts';
 import { consumeRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { emailSchema } from '@/lib/validation';
 
@@ -34,27 +33,5 @@ export async function registerAction(data: { name: string; email: string; passwo
   }
 
   // Normalized by emailSchema, so a case variant finds the existing account
-  const { name, email, password } = parsed.data;
-
-  const existing = await db.user.findUnique({ where: { email } });
-  if (existing) {
-    return { error: 'Un compte existe déjà avec cet email.' };
-  }
-
-  const passwordHash = await hash(password, 12);
-  const initials = name
-    .split(' ')
-    .map(w => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-  const COLORS = ['#A855F7', '#FB7185', '#34D399', '#FBBF24', '#60A5FA'];
-  const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-
-  await db.user.create({
-    data: { name, email, passwordHash, initials, color },
-  });
-
-  return { success: true };
+  return createAccount(parsed.data);
 }

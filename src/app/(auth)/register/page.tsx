@@ -20,7 +20,7 @@ export default function RegisterPage() {
     setError('');
     startTransition(async () => {
       const res = await registerAction({ name, email, password });
-      if (res.error) {
+      if ('error' in res) {
         setError(res.error);
         return;
       }

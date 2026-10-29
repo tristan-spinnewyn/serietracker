@@ -18,7 +18,7 @@ export function ShareModal({ listId, onClose, onShared }: { listId: string; onCl
     setMsg(null);
     start(async () => {
       const res = await addMemberToList(listId, email.trim());
-      if ('error' in res && res.error) {
+      if ('error' in res) {
         setMsg({ text: res.error, ok: false });
       } else {
         setMsg({ text: `${res.name} a été ajouté·e à la liste.`, ok: true });
