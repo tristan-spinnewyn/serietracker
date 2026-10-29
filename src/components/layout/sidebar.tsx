@@ -62,22 +62,23 @@ function ListSection({ title, items }: { title: string; items: SidebarList[] }) 
 export function Sidebar({ lists, user, unreadCount }: { lists: SidebarList[]; user: SidebarUser; unreadCount: number }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => { setOpen(false); }, [pathname]);
+  // The mobile menu remembers the page it was opened on, so navigating closes it
+  const [openOnPath, setOpenOnPath] = useState<string | null>(null);
+  const open = openOnPath === pathname;
+  const close = () => setOpenOnPath(null);
 
   useEffect(() => {
-    const handler = () => setOpen(o => !o);
+    const handler = () => setOpenOnPath(p => (p === pathname ? null : pathname));
     window.addEventListener('toggle-mobile-nav', handler);
     return () => window.removeEventListener('toggle-mobile-nav', handler);
-  }, []);
+  }, [pathname]);
 
   const myLists     = lists.filter(l => l.mine);
   const sharedLists = lists.filter(l => !l.mine);
 
   return (
     <>
-    {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
+    {open && <div className="sidebar-backdrop" onClick={close} />}
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand">
         <div className="brand-mark" />

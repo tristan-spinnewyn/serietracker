@@ -15,19 +15,28 @@ function urlBase64ToUint8Array(base64: string): ArrayBuffer {
   return buf;
 }
 
+type PushState = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed';
+
+// Push support and subscription status of this browser
+async function detectPushState(): Promise<PushState> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    return (await reg.pushManager.getSubscription()) ? 'subscribed' : 'unsubscribed';
+  } catch {
+    return 'unsupported';
+  }
+}
+
 export function PushCard({ vapidPublicKey }: { vapidPublicKey: string }) {
-  const [pushState, setPushState] = useState<'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'>('loading');
+  const [pushState, setPushState] = useState<PushState>('loading');
   const [pushPending, setPushPending] = useState(false);
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setPushState('unsupported');
-      return;
-    }
-    if (Notification.permission === 'denied') { setPushState('denied'); return; }
-    navigator.serviceWorker.register('/sw.js').then(reg =>
-      reg.pushManager.getSubscription().then(sub => setPushState(sub ? 'subscribed' : 'unsubscribed'))
-    ).catch(() => setPushState('unsupported'));
+    let active = true;
+    detectPushState().then(state => { if (active) setPushState(state); });
+    return () => { active = false; };
   }, []);
 
   const handlePushToggle = async () => {

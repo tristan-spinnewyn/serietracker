@@ -67,6 +67,18 @@ describe('Layout components', () => {
       expect(aside?.className).not.toContain('open');
     });
 
+    it('closes the mobile menu after navigating to another page', () => {
+      const { container, rerender } = render(<Sidebar lists={defaultLists} user={defaultUser} unreadCount={0} />);
+      act(() => {
+        window.dispatchEvent(new Event('toggle-mobile-nav'));
+      });
+      expect(container.querySelector('aside')?.className).toContain('open');
+
+      mockPathname.mockReturnValue('/library');
+      rerender(<Sidebar lists={defaultLists} user={defaultUser} unreadCount={0} />);
+      expect(container.querySelector('aside')?.className).not.toContain('open');
+    });
+
     it('déclenche signOut lors du clic sur le bouton de déconnexion', () => {
       render(<Sidebar lists={defaultLists} user={defaultUser} unreadCount={0} />);
       const logoutBtn = screen.getByTitle('Se déconnecter');
