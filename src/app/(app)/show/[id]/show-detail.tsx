@@ -243,9 +243,10 @@ interface Props {
   userRating: number | null;
   followers: FollowerProps[];
   relations: RelationItem[];
+  canEditRelations: boolean;
 }
 
-export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, userRating: initialRating, followers, relations }: Props) {
+export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: initialNotify, userRating: initialRating, followers, relations, canEditRelations }: Props) {
   const router = useRouter();
   const [openSeasons, setOpenSeasons] = useState<Set<string>>(
     () => new Set(seasons.find(s => s.watchedCount < s.episodeCount)?.id ? [seasons.find(s => s.watchedCount < s.episodeCount)!.id] : [])
@@ -697,17 +698,19 @@ export function ShowDetail({ show, seasons, nextEp, userStatus, notifyEnabled: i
           <div className="side-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <h3 style={{ margin: 0 }}>Œuvres liées</h3>
-              <button
-                className="btn"
-                style={{ fontSize: 11, padding: '3px 8px' }}
-                onClick={() => setShowLinkModal(true)}
-              >
-                <Icon name="plus" size={11} /> Lier
-              </button>
+              {canEditRelations && (
+                <button
+                  className="btn"
+                  style={{ fontSize: 11, padding: '3px 8px' }}
+                  onClick={() => setShowLinkModal(true)}
+                >
+                  <Icon name="plus" size={11} /> Lier
+                </button>
+              )}
             </div>
             {liveRelations.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: '8px 0' }}>
-                Aucune liaison — utilise le bouton<br />ou réimporte depuis AniList.
+                {canEditRelations ? <>Aucune liaison — utilise le bouton<br />ou réimporte depuis AniList.</> : 'Aucune liaison.'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

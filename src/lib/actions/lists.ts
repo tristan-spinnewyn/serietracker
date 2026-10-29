@@ -6,6 +6,7 @@ import { RelationType } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { idSchema, idListSchema } from '@/lib/validation';
+import { isAdminEmail } from '@/lib/authz';
 
 const MAX_LIST_ITEMS = 1000;
 
@@ -87,7 +88,9 @@ const linkSchema = z
   .refine(({ fromId, toId }) => fromId !== toId, { message: 'A show cannot be linked to itself' });
 
 export async function linkShows(rawFromId: string, rawToId: string, rawType: RelationType) {
-  await getSession();
+  const session = await getSession();
+  // Relations are global: one user's edit changes every user's show page
+  if (!isAdminEmail(session.user.email)) throw new Error('Accès refusé');
   const { fromId, toId, type } = linkSchema.parse({ fromId: rawFromId, toId: rawToId, type: rawType });
 
   const inverseMap: Record<string, RelationType> = {

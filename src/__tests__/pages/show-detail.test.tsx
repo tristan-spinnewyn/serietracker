@@ -176,6 +176,8 @@ describe('Show Page & ShowDetail', () => {
       expect(screen.getAllByText('Netflix').length).toBeGreaterThan(0);
       expect(screen.getByText('Thomas')).toBeDefined();
       expect(screen.getByText('Arcane Saison 2')).toBeDefined();
+      // Not an admin: the shared relations cannot be edited
+      expect(screen.queryByRole('button', { name: /Lier/i })).toBeNull();
     });
   });
 
@@ -246,7 +248,13 @@ describe('Show Page & ShowDetail', () => {
         },
       ],
       relations: [],
+      canEditRelations: true,
     };
+
+    it('hides the link button from users who cannot edit relations', () => {
+      render(<ShowDetail {...defaultProps} canEditRelations={false} />);
+      expect(screen.queryByRole('button', { name: /Lier/i })).toBeNull();
+    });
 
     it('permet de basculer l\'état vu d\'un épisode', async () => {
       mockToggleEpisode.mockResolvedValue({ success: true });

@@ -3,6 +3,7 @@
 import { hash } from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { parseEmailList } from '@/lib/authz';
 
 const schema = z.object({
   name: z.string().min(1).max(50),
@@ -13,8 +14,7 @@ const schema = z.object({
 export async function registerAction(data: { name: string; email: string; password: string }) {
   // Block if registration closed
   if (process.env.ALLOW_REGISTRATION !== 'true') {
-    const allowed = (process.env.ALLOWED_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase());
-    if (!allowed.includes(data.email.toLowerCase())) {
+    if (!parseEmailList(process.env.ALLOWED_EMAILS).includes(data.email.toLowerCase())) {
       return { error: 'Inscriptions fermées. Demande une invitation.' };
     }
   }

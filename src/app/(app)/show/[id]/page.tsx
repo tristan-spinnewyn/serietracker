@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { isAdminEmail } from '@/lib/authz';
 import { ShowDetail } from './show-detail';
 
 const TMDB_IMG = 'https://image.tmdb.org/t/p/w500';
@@ -125,6 +126,7 @@ export default async function ShowPage({ params }: { params: Promise<{ id: strin
       userRating={myUserShow?.rating ?? null}
       followers={followers}
       relations={relations}
+      canEditRelations={isAdminEmail(session.user.email)}
     />
   );
 }

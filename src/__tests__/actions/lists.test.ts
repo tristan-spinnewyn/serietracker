@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const {
   mockAuth,
@@ -120,6 +120,23 @@ describe('lists actions', () => {
   });
 
   describe('linkShows', () => {
+    const originalAdmins = process.env.ADMIN_EMAILS;
+
+    beforeEach(() => {
+      process.env.ADMIN_EMAILS = 'admin@test.com';
+      mockAuth.mockResolvedValue({ user: { id: 'u1', email: 'admin@test.com' } });
+    });
+
+    afterEach(() => {
+      process.env.ADMIN_EMAILS = originalAdmins;
+    });
+
+    it('refuses non-admin users, since relations are shared by everyone', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'u2', email: 'user@test.com' } });
+      await expect(linkShows('showA', 'showB', 'SEQUEL')).rejects.toThrow('Accès refusé');
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
     it('crée les relations bidirectionnelles avec transaction', async () => {
       mockTransaction.mockResolvedValue([{}, {}]);
       const res = await linkShows('showA', 'showB', 'SEQUEL');
