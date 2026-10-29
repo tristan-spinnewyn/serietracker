@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { Icon } from '@/components/ui/icon';
 import { PROVIDERS } from '@/lib/constants';
 import { updateProfile, updatePassword, updatePlatforms } from '@/lib/actions/settings';
@@ -284,8 +285,10 @@ export function SettingsClient({ user, stats, vapidPublicKey }: { user: User; st
       if ('error' in res && res.error) {
         setPwMsg({ text: res.error, ok: false });
       } else {
-        setPwMsg({ text: 'Mot de passe changé.', ok: true });
+        setPwMsg({ text: 'Mot de passe changé. Reconnexion…', ok: true });
         setCurPw(''); setNewPw(''); setConfPw('');
+        // The change revoked every session, this one included
+        await signOut({ callbackUrl: '/login?passwordChanged=1' });
       }
     });
   };

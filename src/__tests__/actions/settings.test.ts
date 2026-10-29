@@ -73,7 +73,8 @@ describe('settings actions', () => {
       expect(res).toEqual({ success: true });
       expect(mockUpdate).toHaveBeenCalledWith({
         where: { id: 'u1' },
-        data: { passwordHash: 'hash-nouveau' },
+        // Bumping the version invalidates every JWT issued before the change
+        data: { passwordHash: 'hash-nouveau', sessionVersion: { increment: 1 } },
       });
     });
   });

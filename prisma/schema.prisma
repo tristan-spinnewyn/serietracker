@@ -52,6 +52,8 @@ model User {
   color         String   @default("#A855F7")
   initials      String   @default("?")
   platforms     String[] @default([])
+  // Bumped on password change to revoke every JWT issued before it
+  sessionVersion Int     @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
