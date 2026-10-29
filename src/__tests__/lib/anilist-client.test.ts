@@ -127,6 +127,14 @@ describe('Anilist client', () => {
       });
     });
 
+    it('asks AniList for finished anime only when requested', async () => {
+      const fetchMock = emptyPage();
+      globalThis.fetch = fetchMock;
+
+      await searchAnilist('', { finishedOnly: true });
+      expect(sentVariables(fetchMock)).toEqual({ status: 'FINISHED', sort: ['POPULARITY_DESC'], perPage: 30 });
+    });
+
     it('combines the search text with filters', async () => {
       const fetchMock = emptyPage();
       globalThis.fetch = fetchMock;

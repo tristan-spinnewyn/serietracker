@@ -15,9 +15,16 @@ export interface AnimeSearchFilters {
   genres?: string[];
   season?: AnimeSeason;
   seasonYear?: number;
+  /** Only anime that have finished airing */
+  finishedOnly?: boolean;
 }
 
 const MIN_SEASON_YEAR = 1940;
+
+/** The AniList season airing on `date`: winter is January to March, and so on. */
+export function currentAnimeSeason(date = new Date()): { season: AnimeSeason; seasonYear: number } {
+  return { season: ANIME_SEASONS[Math.floor(date.getMonth() / 3)], seasonYear: date.getFullYear() };
+}
 
 function isValidSeasonYear(year: number): boolean {
   return Number.isInteger(year) && year >= MIN_SEASON_YEAR && year <= new Date().getFullYear() + 2;
@@ -36,11 +43,13 @@ export function parseAnimeSearchFilters(params: URLSearchParams): AnimeSearchFil
   const seasonYear = Number(params.get('seasonYear'));
   if (params.has('seasonYear') && isValidSeasonYear(seasonYear)) filters.seasonYear = seasonYear;
 
+  if (params.get('finished') === 'true') filters.finishedOnly = true;
+
   return filters;
 }
 
 export function hasAnimeSearchFilters(filters: AnimeSearchFilters): boolean {
-  return !!filters.genres?.length || !!filters.season || filters.seasonYear !== undefined;
+  return !!filters.genres?.length || !!filters.season || filters.seasonYear !== undefined || !!filters.finishedOnly;
 }
 
 /** Writes the filters into `params`, in the format parseAnimeSearchFilters reads. */
@@ -48,4 +57,5 @@ export function toAnimeSearchParams(filters: AnimeSearchFilters, params: URLSear
   filters.genres?.forEach(g => params.append('genre', g));
   if (filters.season) params.set('season', filters.season);
   if (filters.seasonYear !== undefined) params.set('seasonYear', String(filters.seasonYear));
+  if (filters.finishedOnly) params.set('finished', 'true');
 }
