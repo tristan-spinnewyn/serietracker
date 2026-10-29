@@ -49,6 +49,36 @@ describe('/api/push', () => {
       expect(res.status).toBe(400);
     });
 
+    const subscribe = (endpoint: string) => POST(new NextRequest('http://localhost/api/push', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint, keys: { p256dh: 'k', auth: 'a' } }),
+    }));
+
+    it.each([
+      ['plain http', 'http://fcm.googleapis.com/fcm/send/x'],
+      ['a cloud metadata address', 'https://169.254.169.254/latest/meta-data'],
+      ['localhost', 'https://localhost:3000/api/admin'],
+      ['a lookalike host', 'https://fcm.googleapis.com.evil.example/x'],
+      ['an unknown host', 'https://example.com/push'],
+    ])('rejects %s as a push endpoint, since the server will POST to it', async (_label, endpoint) => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      const res = await subscribe(endpoint);
+      expect(res.status).toBe(400);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'https://fcm.googleapis.com/fcm/send/abc',
+      'https://updates.push.services.mozilla.com/wpush/v2/abc',
+      'https://web.push.apple.com/abc',
+      'https://wns2-par02p.notify.windows.com/w/?token=abc',
+    ])('accepts the browser push service %s', async (endpoint) => {
+      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+      mockFindUnique.mockResolvedValue(null);
+      mockUpsert.mockResolvedValue({});
+      expect((await subscribe(endpoint)).status).toBe(200);
+    });
+
     it('returns 400 when the body is not valid JSON', async () => {
       mockAuth.mockResolvedValue({ user: { id: 'u1' } });
       const req = new NextRequest('http://localhost/api/push', { method: 'POST', body: '{not json' });
