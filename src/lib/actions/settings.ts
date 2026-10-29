@@ -45,7 +45,10 @@ export async function updatePassword(data: { current: string; next: string }) {
   const valid = await compare(current, user.passwordHash);
   if (!valid) return { error: 'Mot de passe actuel incorrect.' };
 
-  await db.user.update({ where: { id }, data: { passwordHash: await hash(next, 12) } });
+  await db.user.update({
+    where: { id },
+    data: { passwordHash: await hash(next, 12), sessionVersion: { increment: 1 } },
+  });
   return { success: true };
 }
 

@@ -142,6 +142,7 @@ describe('NextAuth credentials provider authorize', () => {
       email: 'test@example.com',
       name: 'Testeur',
       passwordHash: 'hash',
+      sessionVersion: 0,
     });
     mockCompare.mockResolvedValue(true);
 
@@ -151,6 +152,44 @@ describe('NextAuth credentials provider authorize', () => {
       id: 'u1',
       email: 'test@example.com',
       name: 'Testeur',
+      sessionVersion: 0,
     });
+  });
+});
+
+describe('server-side jwt callback (session revocation)', () => {
+  const jwt = () => getConfig().callbacks.jwt;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('stores the user id and session version at sign-in without a DB call', async () => {
+    const token = await jwt()({ token: {}, user: { id: 'u1', sessionVersion: 3 } });
+    expect(token).toEqual({ id: 'u1', sessionVersion: 3 });
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('keeps the token while its version matches the database', async () => {
+    mockFindUnique.mockResolvedValue({ sessionVersion: 3 });
+    const token = await jwt()({ token: { id: 'u1', sessionVersion: 3 } });
+    expect(token).toEqual({ id: 'u1', sessionVersion: 3 });
+    expect(mockFindUnique).toHaveBeenCalledWith({ where: { id: 'u1' }, select: { sessionVersion: true } });
+  });
+
+  it('treats tokens issued before versioning as version 0', async () => {
+    mockFindUnique.mockResolvedValue({ sessionVersion: 0 });
+    const token = await jwt()({ token: { id: 'u1' } });
+    expect(token).toEqual({ id: 'u1' });
+  });
+
+  it('revokes the token once the password has been changed', async () => {
+    mockFindUnique.mockResolvedValue({ sessionVersion: 4 });
+    expect(await jwt()({ token: { id: 'u1', sessionVersion: 3 } })).toBeNull();
+  });
+
+  it('revokes the token when the user no longer exists', async () => {
+    mockFindUnique.mockResolvedValue(null);
+    expect(await jwt()({ token: { id: 'u1', sessionVersion: 0 } })).toBeNull();
   });
 });

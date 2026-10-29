@@ -15,6 +15,7 @@ const {
   mockUpdatePassword,
   mockUpdatePlatforms,
   mockSyncFromAnilist,
+  mockSignOut,
 } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockApiFetch: vi.fn(),
@@ -27,9 +28,11 @@ const {
   mockUpdatePassword: vi.fn(),
   mockUpdatePlatforms: vi.fn(),
   mockSyncFromAnilist: vi.fn(),
+  mockSignOut: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: mockAuth }));
+vi.mock('next-auth/react', () => ({ signOut: mockSignOut }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, refresh: vi.fn() }),
   redirect: mockRedirect,
@@ -197,6 +200,8 @@ describe('Search & Settings Pages', () => {
 
       await waitFor(() => {
         expect(mockUpdatePassword).toHaveBeenCalledWith({ current: 'oldpass123', next: 'newpass123' });
+        // The change revokes every session, the current one included
+        expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/login?passwordChanged=1' });
       });
     });
 
