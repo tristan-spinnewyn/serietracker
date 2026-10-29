@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { apiErrorResponse } from '@/lib/api-error';
 
 export async function GET() {
   try {
@@ -42,8 +43,6 @@ export async function GET() {
 
     return NextResponse.json({ lists });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[GET /api/lists]', err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiErrorResponse('GET /api/lists', err);
   }
 }

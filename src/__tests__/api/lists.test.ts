@@ -48,6 +48,7 @@ describe('GET /api/lists', () => {
     const res = await GET();
     expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.error).toBe('Erreur DB');
+    expect(body.error).toBe('Erreur serveur');
+    expect(JSON.stringify(body)).not.toContain('Erreur DB');
   });
 });

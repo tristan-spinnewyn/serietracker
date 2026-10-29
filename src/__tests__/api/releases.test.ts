@@ -152,5 +152,8 @@ describe('GET /api/releases', () => {
     const req = new NextRequest('http://localhost/api/releases');
     const res = await GET(req);
     expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('Erreur serveur');
+    expect(JSON.stringify(body)).not.toMatch(/Erreur DB|Crash/);
   });
 });
