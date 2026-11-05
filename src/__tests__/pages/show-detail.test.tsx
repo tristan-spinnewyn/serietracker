@@ -426,7 +426,8 @@ describe('Show Page & ShowDetail', () => {
 
     it('ouvre la modale pour lier une œuvre et appelle linkShows', async () => {
       mockApiFetch.mockResolvedValue({
-        local: [
+        shows: [
+          { id: 's1', title: 'Current show', type: 'ANIME', year: 2023, tmdbId: null, anilistId: 1, posterPath: null },
           { id: 's2', title: 'Frieren Saison 2', type: 'ANIME', year: 2026, tmdbId: null, anilistId: 999, posterPath: null },
         ],
       });
@@ -445,6 +446,9 @@ describe('Show Page & ShowDetail', () => {
       await waitFor(() => {
         expect(screen.getByText('Frieren Saison 2')).toBeDefined();
       });
+      // Linking searches the local catalog, never the external APIs, and hides the show itself
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/shows/catalog?q=Frieren');
+      expect(screen.queryByText('Current show')).toBeNull();
 
       fireEvent.click(screen.getByText('Frieren Saison 2'));
 

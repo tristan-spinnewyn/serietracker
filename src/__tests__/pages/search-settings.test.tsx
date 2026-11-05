@@ -71,7 +71,7 @@ describe('Search & Settings Pages', () => {
     it('shows the API error and re-enables the card when an import fails', async () => {
       mockApiFetch.mockImplementation(async (url: string) => {
         if (url === '/api/shows/import') throw new Error("Trop d'imports, réessaie dans une minute.");
-        return { local: [], remote: [{ tmdbId: 100, title: 'Archer', type: 'SERIES', year: 2009, posterPath: null }] };
+        return { results: [{ tmdbId: 100, title: 'Archer', type: 'SERIES', year: 2009, posterPath: null }] };
       });
 
       render(<SearchPage />);
@@ -87,43 +87,43 @@ describe('Search & Settings Pages', () => {
       expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('permet de taper une recherche et affiche les résultats locaux et distants', async () => {
-      mockApiFetch.mockResolvedValue({
-        local: [
-          { id: 's1', title: 'Arcane', type: 'SERIES', year: 2021, providers: ['netflix'], userShows: [] },
-        ],
-        remote: [
-          { tmdbId: 100, title: 'Archer', type: 'SERIES', year: 2009, posterPath: null },
-        ],
-      });
+    it('shows every result returned by the APIs and imports the one clicked', async () => {
+      const results = Array.from({ length: 45 }, (_, i) => ({
+        tmdbId: 100 + i, title: `Show ${i}`, type: 'SERIES', year: 2009, posterPath: null,
+      }));
+      mockApiFetch.mockResolvedValue({ results });
       render(<SearchPage />);
-      const input = screen.getByPlaceholderText('Titre, studio, acteur…');
-      fireEvent.change(input, { target: { value: 'Arc' } });
+      fireEvent.change(screen.getByPlaceholderText('Titre, studio, acteur…'), { target: { value: 'Sho' } });
 
+      await waitFor(() => expect(screen.getByText('Show 44')).toBeDefined());
+      expect(screen.getByText('45 résultats')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Résultats TMDB \/ AniList/ })).toBeDefined();
+      expect(screen.queryByText(/Dans ta bibliothèque/)).toBeNull();
+
+      fireEvent.click(screen.getByText('Show 0'));
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
-        expect(screen.getByText('Arcane')).toBeDefined();
-        expect(screen.getByText('Archer')).toBeDefined();
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/shows/import', expect.objectContaining({
+          method: 'POST', body: JSON.stringify({ tmdbId: 100 }),
+        }));
       });
 
-      // Import d'un résultat distant
-      fireEvent.click(screen.getByText('Archer'));
+      fireEvent.click(screen.getByRole('button', { name: 'Effacer' }));
+      expect(screen.queryByText('Show 0')).toBeNull();
+    });
 
-      await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
-          '/api/shows/import',
-          expect.objectContaining({ method: 'POST' })
-        );
-      });
+    it('no longer offers a filter based on the local catalog', () => {
+      render(<SearchPage />);
+      expect(screen.queryByRole('button', { name: /Mes plateformes/i })).toBeNull();
+    });
 
-      // Bouton Effacer
-      const clearBtn = screen.getByRole('button', { name: 'Effacer' });
-      fireEvent.click(clearBtn);
-      expect(screen.queryByText('Arcane')).toBeNull();
-
-      // Filtres
+    it('sends the series type to the search API', async () => {
+      mockApiFetch.mockResolvedValue({ results: [] });
+      render(<SearchPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Séries' }));
-      fireEvent.click(screen.getByRole('button', { name: /Mes plateformes/i }));
+      fireEvent.change(screen.getByPlaceholderText('Titre, studio, acteur…'), { target: { value: 'Arc' } });
+
+      await waitFor(() => expect(mockApiFetch).toHaveBeenLastCalledWith('/api/shows/search?q=Arc&type=SERIES'));
+      expect(await screen.findByText('Aucun résultat')).toBeDefined();
     });
 
     it('only offers genre and season filters once the anime type is picked', () => {
@@ -139,8 +139,7 @@ describe('Search & Settings Pages', () => {
 
     it('browses anime by genre, season and year without typing a title', async () => {
       mockApiFetch.mockResolvedValue({
-        local: [],
-        remote: [{ anilistId: 9, title: 'Fall Hit', type: 'ANIME', year: 2026, posterPath: null }],
+        results: [{ anilistId: 9, title: 'Fall Hit', type: 'ANIME', year: 2026, posterPath: null }],
       });
       render(<SearchPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
@@ -157,7 +156,7 @@ describe('Search & Settings Pages', () => {
     });
 
     it('picks the current season in one click, and clears it on a second click', async () => {
-      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      mockApiFetch.mockResolvedValue({ results: [] });
       const { season, seasonYear } = currentAnimeSeason();
       render(<SearchPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
@@ -176,7 +175,7 @@ describe('Search & Settings Pages', () => {
     });
 
     it('toggles a finished-only filter', async () => {
-      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      mockApiFetch.mockResolvedValue({ results: [] });
       render(<SearchPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
 
@@ -191,7 +190,7 @@ describe('Search & Settings Pages', () => {
     });
 
     it('drops the anime filters when switching back to series', async () => {
-      mockApiFetch.mockResolvedValue({ local: [], remote: [] });
+      mockApiFetch.mockResolvedValue({ results: [] });
       render(<SearchPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Animes' }));
       fireEvent.change(screen.getByLabelText('Genre'), { target: { value: 'Drama' } });

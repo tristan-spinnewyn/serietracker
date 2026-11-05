@@ -7,6 +7,7 @@ import {
   batchFetchAnilistData,
   getLastAnilistError,
   AnilistApiError,
+  ANILIST_MAX_SEARCH_PAGES,
 } from '@/lib/anilist/client';
 
 describe('Anilist client', () => {
@@ -110,7 +111,7 @@ describe('Anilist client', () => {
       globalThis.fetch = fetchMock;
 
       await searchAnilist('Titan');
-      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', perPage: 10 });
+      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', page: 1, perPage: 50 });
     });
 
     it('browses by genre and season, most popular first, when there is no search text', async () => {
@@ -123,7 +124,8 @@ describe('Anilist client', () => {
         season: 'FALL',
         seasonYear: 2026,
         sort: ['POPULARITY_DESC'],
-        perPage: 30,
+        page: 1,
+        perPage: 50,
       });
     });
 
@@ -132,7 +134,7 @@ describe('Anilist client', () => {
       globalThis.fetch = fetchMock;
 
       await searchAnilist('', { finishedOnly: true });
-      expect(sentVariables(fetchMock)).toEqual({ status: 'FINISHED', sort: ['POPULARITY_DESC'], perPage: 30 });
+      expect(sentVariables(fetchMock)).toEqual({ status: 'FINISHED', sort: ['POPULARITY_DESC'], page: 1, perPage: 50 });
     });
 
     it('combines the search text with filters', async () => {
@@ -140,7 +142,54 @@ describe('Anilist client', () => {
       globalThis.fetch = fetchMock;
 
       await searchAnilist('Titan', { seasonYear: 2013 });
-      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', seasonYear: 2013, perPage: 30 });
+      expect(sentVariables(fetchMock)).toEqual({ search: 'Titan', seasonYear: 2013, page: 1, perPage: 50 });
+    });
+
+    const anilistPage = (ids: number[], hasNextPage: boolean) => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({
+        data: {
+          Page: {
+            pageInfo: { hasNextPage },
+            media: ids.map(id => ({ id, title: { romaji: `Anime ${id}` }, coverImage: null, startDate: null, description: null })),
+          },
+        },
+      }),
+    } as unknown as Response);
+
+    it('follows the next pages until AniList has no more results', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(anilistPage([1, 2], true))
+        .mockResolvedValueOnce(anilistPage([2, 3], true))
+        .mockResolvedValueOnce(anilistPage([4], false));
+      globalThis.fetch = fetchMock;
+
+      const res = await searchAnilist('Titan');
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(JSON.parse(fetchMock.mock.calls[2][1].body).variables.page).toBe(3);
+      expect(res.map(r => r.anilistId)).toEqual([1, 2, 3, 4]);
+    });
+
+    it('stops at the page cap so a broad browse stays within the rate limit', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => anilistPage([fetchMock.mock.calls.length], true));
+      globalThis.fetch = fetchMock;
+
+      const res = await searchAnilist('', { genres: ['Action'] });
+
+      expect(fetchMock).toHaveBeenCalledTimes(ANILIST_MAX_SEARCH_PAGES);
+      expect(res).toHaveLength(ANILIST_MAX_SEARCH_PAGES);
+    });
+
+    it('keeps the pages already loaded when a later page fails', async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce(anilistPage([1], true))
+        .mockResolvedValueOnce({ ok: false, status: 500, headers: new Headers(), json: async () => ({}) } as unknown as Response);
+
+      const res = await searchAnilist('Titan');
+
+      expect(res.map(r => r.anilistId)).toEqual([1]);
     });
   });
 

@@ -4,7 +4,8 @@ import {
   stripHtml, buildAnilistEpisodes, mapAnilistStatus, parseAnilistProviders, parseAnilistProviderLinks,
   type AnilistEpisode,
 } from '@/lib/anilist/mappers';
-import { hasAnimeSearchFilters, type AnimeSearchFilters } from '@/lib/anilist/search-filters';
+import type { AnimeSearchFilters } from '@/lib/anilist/search-filters';
+import { uniqueBy } from '@/lib/unique-by';
 
 // Public API of the AniList integration (queries + re-exported helpers)
 export { getLastAnilistError } from '@/lib/anilist/gql';
@@ -42,13 +43,42 @@ export interface AnilistRelation {
 }
 
 /**
- * Searches AniList by title, by genre / season, or both. Without a title,
- * results are sorted by popularity and a larger page is returned.
+ * Upper bound on the AniList pages loaded per search (50 results each).
+ * Requests are paced at one every 2 s, so this keeps a broad browse quick.
+ */
+export const ANILIST_MAX_SEARCH_PAGES = 4;
+const ANILIST_SEARCH_PAGE_SIZE = 50;
+
+interface AnilistSearchPage {
+  Page: { pageInfo?: { hasNextPage?: boolean }; media: unknown[] };
+}
+
+function mapAnilistSearchResult(m: unknown): AnilistSearchResult {
+  const media = m as Record<string, unknown>;
+  const title = media.title as Record<string, string>;
+  const coverImage = media.coverImage as Record<string, string>;
+  const startDate = media.startDate as Record<string, number>;
+  return {
+    anilistId: media.id as number,
+    title: title.english ?? title.romaji,
+    originalTitle: title.romaji ?? null,
+    type: 'ANIME' as const,
+    year: startDate?.year ?? null,
+    posterPath: coverImage?.large ?? null,
+    overview: stripHtml(media.description as string),
+  };
+}
+
+/**
+ * Searches AniList by title, by genre / season, or both, and loads every
+ * result page up to ANILIST_MAX_SEARCH_PAGES. Without a title, results are
+ * sorted by popularity. A failing page keeps the pages already loaded.
  */
 export async function searchAnilist(q: string, filters: AnimeSearchFilters = {}): Promise<AnilistSearchResult[]> {
   const query = `
-    query ($search: String, $genres: [String], $season: MediaSeason, $seasonYear: Int, $status: MediaStatus, $sort: [MediaSort], $perPage: Int) {
-      Page(perPage: $perPage) {
+    query ($search: String, $genres: [String], $season: MediaSeason, $seasonYear: Int, $status: MediaStatus, $sort: [MediaSort], $page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { hasNextPage }
         media(search: $search, genre_in: $genres, season: $season, seasonYear: $seasonYear, status: $status, sort: $sort, type: ANIME) {
           id
           title { romaji english native }
@@ -60,7 +90,6 @@ export async function searchAnilist(q: string, filters: AnimeSearchFilters = {})
     }
   `;
 
-  const browsing = hasAnimeSearchFilters(filters);
   // Unset variables are left out so AniList ignores the matching argument
   const variables: Record<string, unknown> = {
     ...(q ? { search: q } : {}),
@@ -69,27 +98,17 @@ export async function searchAnilist(q: string, filters: AnimeSearchFilters = {})
     ...(filters.seasonYear !== undefined ? { seasonYear: filters.seasonYear } : {}),
     ...(filters.finishedOnly ? { status: 'FINISHED' } : {}),
     ...(q ? {} : { sort: ['POPULARITY_DESC'] }),
-    perPage: browsing ? 30 : 10,
   };
 
-  const data = await gql<{ Page: { media: unknown[] } }>(query, variables);
-  if (!data) return [];
+  const media: unknown[] = [];
+  for (let page = 1; page <= ANILIST_MAX_SEARCH_PAGES; page++) {
+    const data = await gql<AnilistSearchPage>(query, { ...variables, page, perPage: ANILIST_SEARCH_PAGE_SIZE });
+    if (!data) break;
+    media.push(...(data.Page?.media ?? []));
+    if (!data.Page?.pageInfo?.hasNextPage) break;
+  }
 
-  return (data.Page?.media ?? []).map((m: unknown) => {
-    const media = m as Record<string, unknown>;
-    const title = media.title as Record<string, string>;
-    const coverImage = media.coverImage as Record<string, string>;
-    const startDate = media.startDate as Record<string, number>;
-    return {
-      anilistId: media.id as number,
-      title: title.english ?? title.romaji,
-      originalTitle: title.romaji ?? null,
-      type: 'ANIME' as const,
-      year: startDate?.year ?? null,
-      posterPath: coverImage?.large ?? null,
-      overview: stripHtml(media.description as string),
-    };
-  });
+  return uniqueBy(media.map(mapAnilistSearchResult), r => r.anilistId);
 }
 
 export async function fetchAnilistDetail(anilistId: number): Promise<AnilistShowDetail | null> {

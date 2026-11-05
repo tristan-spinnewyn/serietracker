@@ -1,3 +1,4 @@
+import { uniqueBy } from '@/lib/unique-by';
 import type { ShowStatus } from '@prisma/client';
 
 export const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -94,17 +95,11 @@ export interface TmdbEpisode {
   stillPath: string | null;
 }
 
-export async function searchTmdb(q: string): Promise<TmdbSearchResult[]> {
-  if (!process.env.TMDB_READ_ACCESS_TOKEN) return [];
+/** Upper bound on the TMDB pages loaded per search (20 results each). */
+export const TMDB_MAX_SEARCH_PAGES = 10;
 
-  const res = await fetch(
-    `${TMDB_BASE}/search/tv?query=${encodeURIComponent(q)}&language=fr-FR&page=1`,
-    { headers: tmdbHeaders() }
-  );
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  return (data.results ?? []).slice(0, 10).map((r: Record<string, unknown>) => ({
+function mapTmdbSearchResult(r: Record<string, unknown>): TmdbSearchResult {
+  return {
     tmdbId: r.id as number,
     title: (r.name ?? r.original_name) as string,
     originalTitle: r.original_name as string ?? null,
@@ -112,7 +107,34 @@ export async function searchTmdb(q: string): Promise<TmdbSearchResult[]> {
     year: r.first_air_date ? new Date(r.first_air_date as string).getFullYear() : null,
     posterPath: r.poster_path as string ?? null,
     overview: r.overview as string ?? null,
-  }));
+  };
+}
+
+async function fetchTmdbSearchPage(q: string, page: number): Promise<{ results: Record<string, unknown>[]; totalPages: number }> {
+  const res = await fetch(
+    `${TMDB_BASE}/search/tv?query=${encodeURIComponent(q)}&language=fr-FR&page=${page}`,
+    { headers: tmdbHeaders() }
+  );
+  if (!res.ok) return { results: [], totalPages: 0 };
+  const data = await res.json();
+  return { results: data.results ?? [], totalPages: data.total_pages ?? 1 };
+}
+
+/**
+ * Searches TMDB series and loads every result page, up to
+ * TMDB_MAX_SEARCH_PAGES. Pages that fail are skipped.
+ */
+export async function searchTmdb(q: string): Promise<TmdbSearchResult[]> {
+  if (!process.env.TMDB_READ_ACCESS_TOKEN) return [];
+
+  const first = await fetchTmdbSearchPage(q, 1);
+  const lastPage = Math.min(first.totalPages, TMDB_MAX_SEARCH_PAGES);
+  const otherPages = await Promise.all(
+    Array.from({ length: Math.max(lastPage - 1, 0) }, (_, i) => fetchTmdbSearchPage(q, i + 2)),
+  );
+
+  const results = [first, ...otherPages].flatMap(p => p.results).map(mapTmdbSearchResult);
+  return uniqueBy(results, r => r.tmdbId);
 }
 
 export async function fetchTmdbDetail(tmdbId: number): Promise<TmdbShowDetail | null> {
