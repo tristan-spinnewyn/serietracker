@@ -25,8 +25,8 @@ export function LinkShowModal({ showId, onClose, onLinked }: {
     if (!hasQuery) return;
     let active = true;
     const timer = setTimeout(async () => {
-      const d = await apiFetch<{ local: typeof lastResults }>(`/api/shows/search?q=${encodeURIComponent(q)}`);
-      if (active) setLastResults((d.local ?? []).filter(s => s.id !== showId));
+      const d = await apiFetch<{ shows: typeof lastResults }>(`/api/shows/catalog?q=${encodeURIComponent(q)}`);
+      if (active) setLastResults((d.shows ?? []).filter(s => s.id !== showId));
     }, 300);
     return () => { active = false; clearTimeout(timer); };
   }, [q, hasQuery, showId]);

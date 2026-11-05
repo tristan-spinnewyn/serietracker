@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchTmdb, fetchTmdbDetail, fetchTmdbProviders } from '@/lib/tmdb/client';
+import { searchTmdb, fetchTmdbDetail, fetchTmdbProviders, TMDB_MAX_SEARCH_PAGES } from '@/lib/tmdb/client';
 
 describe('TMDB client', () => {
   const originalEnv = process.env.TMDB_READ_ACCESS_TOKEN;
@@ -67,6 +67,53 @@ describe('TMDB client', () => {
       });
       expect(results[1].year).toBeNull();
       expect(results[1].title).toBe('Sans titre français');
+    });
+
+    const tmdbPage = (page: number, totalPages: number, ids: number[]) => ({
+      ok: true,
+      json: async () => ({
+        page,
+        total_pages: totalPages,
+        results: ids.map(id => ({ id, name: `Show ${id}`, first_air_date: '', poster_path: null, overview: null })),
+      }),
+    } as Response);
+
+    it('loads every page of results, not just the first ten', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        const page = Number(new URL(url).searchParams.get('page'));
+        return tmdbPage(page, 3, Array.from({ length: 20 }, (_, i) => page * 100 + i));
+      });
+      globalThis.fetch = fetchMock;
+
+      const results = await searchTmdb('Show');
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(results).toHaveLength(60);
+    });
+
+    it('stops at the page cap on very broad searches', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        const page = Number(new URL(url).searchParams.get('page'));
+        return tmdbPage(page, 500, [page]);
+      });
+      globalThis.fetch = fetchMock;
+
+      const results = await searchTmdb('a');
+
+      expect(fetchMock).toHaveBeenCalledTimes(TMDB_MAX_SEARCH_PAGES);
+      expect(results).toHaveLength(TMDB_MAX_SEARCH_PAGES);
+    });
+
+    it('keeps the pages that loaded and drops duplicates across pages', async () => {
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        const page = Number(new URL(url).searchParams.get('page'));
+        if (page === 3) return { ok: false, status: 500 } as Response;
+        return tmdbPage(page, 3, page === 1 ? [1, 2] : [2, 3]);
+      });
+
+      const results = await searchTmdb('Show');
+
+      expect(results.map(r => r.tmdbId)).toEqual([1, 2, 3]);
     });
   });
 

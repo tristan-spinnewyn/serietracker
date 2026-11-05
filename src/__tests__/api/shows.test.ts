@@ -34,131 +34,116 @@ vi.mock('@/lib/sync/import-show', () => ({
 }));
 
 import { GET as searchGet } from '@/app/api/shows/search/route';
+import { GET as catalogGet } from '@/app/api/shows/catalog/route';
 import { POST as importPost } from '@/app/api/shows/import/route';
 import { resetRateLimits } from '@/lib/rate-limit';
 
 describe('/api/shows/search', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+    mockSearchTmdb.mockResolvedValue([]);
+    mockSearchAnilist.mockResolvedValue([]);
   });
+
+  const search = async (query: string) =>
+    (await searchGet(new NextRequest(`http://localhost/api/shows/search?${query}`))).json();
 
   it('renvoie 401 si non connecté', async () => {
     mockAuth.mockResolvedValue(null);
-    const req = new NextRequest('http://localhost/api/shows/search?q=test');
-    const res = await searchGet(req);
+    const res = await searchGet(new NextRequest('http://localhost/api/shows/search?q=test'));
     expect(res.status).toBe(401);
   });
 
-  it('renvoie tableaux vides si la recherche est trop courte (< 2 car)', async () => {
-    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
-    const req = new NextRequest('http://localhost/api/shows/search?q=a');
-    const res = await searchGet(req);
-    const body = await res.json();
-    expect(body).toEqual({ local: [], remote: [] });
+  it('returns no results when the search text is shorter than 2 characters', async () => {
+    expect(await search('q=a')).toEqual({ results: [] });
+    expect(mockSearchTmdb).not.toHaveBeenCalled();
+    expect(mockSearchAnilist).not.toHaveBeenCalled();
   });
 
-  it('renvoie les résultats locaux et cherche en remote si local < 5', async () => {
-    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
-    mockShowFindMany.mockResolvedValue([
-      { id: 's1', title: 'Arcane', tmdbId: 100, anilistId: null },
-    ]);
-    mockSearchTmdb.mockResolvedValue([
-      { tmdbId: 100, title: 'Arcane' },
-      { tmdbId: 101, title: 'Archer' },
-    ]);
-    mockSearchAnilist.mockResolvedValue([
-      { anilistId: 50, title: 'Anime' },
-    ]);
+  it('only queries TMDB and AniList, never the local catalog', async () => {
+    mockSearchTmdb.mockResolvedValue([{ tmdbId: 100, title: 'Arcane' }, { tmdbId: 101, title: 'Archer' }]);
+    mockSearchAnilist.mockResolvedValue([{ anilistId: 50, title: 'Arc Anime' }]);
 
-    const req = new NextRequest('http://localhost/api/shows/search?q=Arc');
-    const res = await searchGet(req);
-    const body = await res.json();
+    const body = await search('q=Arc');
 
-    expect(body.local).toHaveLength(1);
-    // Archer et Anime (Arcane filtré car tmdbId déjà en local)
-    expect(body.remote).toHaveLength(2);
-    expect(body.remote[0].title).toBe('Archer');
-    expect(body.remote[1].title).toBe('Anime');
+    expect(mockSearchTmdb).toHaveBeenCalledWith('Arc');
+    expect(mockSearchAnilist).toHaveBeenCalledWith('Arc', {});
+    expect(mockShowFindMany).not.toHaveBeenCalled();
+    expect(mockUserFindUnique).not.toHaveBeenCalled();
+    expect(body.results.map((r: { title: string }) => r.title)).toEqual(['Arcane', 'Archer', 'Arc Anime']);
   });
 
-  it('filtre sur les plateformes de l\'utilisateur si onlyMyPlatforms=true', async () => {
-    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
-    mockUserFindUnique.mockResolvedValue({ platforms: ['netflix'] });
-    mockShowFindMany.mockResolvedValue([]);
-    mockSearchTmdb.mockResolvedValue([]);
+  it('keeps the results of one API when the other fails', async () => {
+    mockSearchTmdb.mockRejectedValue(new Error('TMDB down'));
+    mockSearchAnilist.mockResolvedValue([{ anilistId: 50, title: 'Arc Anime' }]);
+
+    const body = await search('q=Arc');
+
+    expect(body.results).toEqual([{ anilistId: 50, title: 'Arc Anime' }]);
+  });
+
+  it('only asks TMDB for series and AniList for anime', async () => {
+    await search('q=Arc&type=SERIES');
+    expect(mockSearchTmdb).toHaveBeenCalled();
+    expect(mockSearchAnilist).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
     mockSearchAnilist.mockResolvedValue([]);
-
-    const req = new NextRequest('http://localhost/api/shows/search?q=Show&onlyMyPlatforms=true');
-    await searchGet(req);
-
-    expect(mockUserFindUnique).toHaveBeenCalledWith({
-      where: { id: 'u1' },
-      select: { platforms: true },
-    });
-    expect(mockShowFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          providers: { hasSome: ['netflix'] },
-        }),
-      }),
-    );
+    await search('q=Arc&type=ANIME');
+    expect(mockSearchTmdb).not.toHaveBeenCalled();
+    expect(mockSearchAnilist).toHaveBeenCalled();
   });
 
   describe('anime filters', () => {
-    beforeEach(() => {
-      mockAuth.mockResolvedValue({ user: { id: 'u1' } });
-    });
-
     it('browses AniList by genre and season without a search text, and never queries TMDB', async () => {
-      mockSearchAnilist.mockResolvedValue([
-        { anilistId: 1, title: 'Already here' },
-        { anilistId: 2, title: 'New one' },
-      ]);
-      mockShowFindMany.mockResolvedValue([{ id: 's1', title: 'Already here', tmdbId: null, anilistId: 1 }]);
+      mockSearchAnilist.mockResolvedValue([{ anilistId: 1, title: 'Fall Hit' }]);
 
-      const req = new NextRequest('http://localhost/api/shows/search?genre=Action&season=FALL&seasonYear=2026');
-      const body = await (await searchGet(req)).json();
+      const body = await search('genre=Action&season=FALL&seasonYear=2026');
 
       expect(mockSearchAnilist).toHaveBeenCalledWith('', { genres: ['Action'], season: 'FALL', seasonYear: 2026 });
       expect(mockSearchTmdb).not.toHaveBeenCalled();
-      expect(body.local.map((s: { id: string }) => s.id)).toEqual(['s1']);
-      expect(body.remote.map((r: { title: string }) => r.title)).toEqual(['New one']);
-    });
-
-    it('looks up the AniList results in the local catalog instead of matching the title', async () => {
-      mockSearchAnilist.mockResolvedValue([{ anilistId: 7, title: 'X' }]);
-      mockShowFindMany.mockResolvedValue([]);
-
-      await searchGet(new NextRequest('http://localhost/api/shows/search?q=Ti&genre=Drama'));
-
-      expect(mockSearchAnilist).toHaveBeenCalledWith('Ti', { genres: ['Drama'] });
-      expect(mockShowFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ anilistId: { in: [7] } }) }),
-      );
-    });
-
-    it('skips the local lookup when AniList finds nothing', async () => {
-      mockSearchAnilist.mockResolvedValue([]);
-
-      const body = await (await searchGet(new NextRequest('http://localhost/api/shows/search?season=WINTER'))).json();
-
       expect(mockShowFindMany).not.toHaveBeenCalled();
-      expect(body).toEqual({ local: [], remote: [] });
+      expect(body.results.map((r: { title: string }) => r.title)).toEqual(['Fall Hit']);
     });
 
-    it('keeps the platform filter on local shows', async () => {
-      mockUserFindUnique.mockResolvedValue({ platforms: ['crunchyroll'] });
-      mockSearchAnilist.mockResolvedValue([{ anilistId: 3, title: 'Y' }]);
-      mockShowFindMany.mockResolvedValue([]);
-
-      await searchGet(new NextRequest('http://localhost/api/shows/search?seasonYear=2025&onlyMyPlatforms=true'));
-
-      expect(mockShowFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ providers: { hasSome: ['crunchyroll'] } }),
-        }),
-      );
+    it('combines the search text with the filters', async () => {
+      await search('q=Ti&genre=Drama');
+      expect(mockSearchAnilist).toHaveBeenCalledWith('Ti', { genres: ['Drama'] });
     });
+  });
+});
+
+describe('/api/shows/catalog', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({ user: { id: 'u1' } });
+  });
+
+  const catalog = (query: string) => catalogGet(new NextRequest(`http://localhost/api/shows/catalog?${query}`));
+
+  it('renvoie 401 si non connecté', async () => {
+    mockAuth.mockResolvedValue(null);
+    expect((await catalog('q=Arc')).status).toBe(401);
+  });
+
+  it('returns no shows when the search text is shorter than 2 characters', async () => {
+    expect(await (await catalog('q=a')).json()).toEqual({ shows: [] });
+    expect(mockShowFindMany).not.toHaveBeenCalled();
+  });
+
+  it('searches the local catalog by title, without calling the external APIs', async () => {
+    mockShowFindMany.mockResolvedValue([{ id: 's1', title: 'Arcane' }]);
+
+    const body = await (await catalog('q=%20Arc%20')).json();
+
+    expect(body).toEqual({ shows: [{ id: 's1', title: 'Arcane' }] });
+    expect(mockShowFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { title: { contains: 'Arc', mode: 'insensitive' } },
+      take: 20,
+    }));
+    expect(mockSearchTmdb).not.toHaveBeenCalled();
+    expect(mockSearchAnilist).not.toHaveBeenCalled();
   });
 });
 
